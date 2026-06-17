@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/sidecar-proxy"]
+resolver = "2"

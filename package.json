@@ -1,0 +1,370 @@
+{
+  "name": "llm-sidecar",
+  "displayName": "LLM Sidecar",
+  "description": "Bind-and-return tool orchestration for Copilot BYOK: local llama.cpp sidecar synthesizes tool calls so upstream models only reason in prose; Copilot executes tools with Human-in-the-Loop approval.",
+  "version": "0.1.0",
+  "publisher": "jo-hemphill",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/josh-hemphill/vscode-llm-sidecar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/josh-hemphill/vscode-llm-sidecar/issues"
+  },
+  "homepage": "https://github.com/josh-hemphill/vscode-llm-sidecar#readme",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "copilot",
+    "byok",
+    "llama.cpp",
+    "tool calling",
+    "agent",
+    "proxy",
+    "bind-and-return",
+    "cursor"
+  ],
+  "type": "module",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "files": [
+    "dist/extension.js",
+    "dist/extension.js.map",
+    "assets/runtime-manifest.json",
+    "bin/**/sidecar-proxy*"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "llmSidecar.startProxy",
+        "title": "LLM Sidecar: Start Sidecar"
+      },
+      {
+        "command": "llmSidecar.stopProxy",
+        "title": "LLM Sidecar: Stop Sidecar"
+      },
+      {
+        "command": "llmSidecar.reloadProxy",
+        "title": "LLM Sidecar: Reload Config"
+      },
+      {
+        "command": "llmSidecar.syncLanguageModels",
+        "title": "LLM Sidecar: Sync Language Models"
+      },
+      {
+        "command": "llmSidecar.downloadModel",
+        "title": "LLM Sidecar: Download Bind Model"
+      },
+      {
+        "command": "llmSidecar.downloadLlamaServer",
+        "title": "LLM Sidecar: Download Llama Server"
+      },
+      {
+        "command": "llmSidecar.toggleHitl",
+        "title": "LLM Sidecar: Toggle Human-in-the-Loop Enforcement"
+      },
+      {
+        "command": "llmSidecar.viewAuditLog",
+        "title": "LLM Sidecar: View Audit Log"
+      },
+      {
+        "command": "llmSidecar.exportProfile",
+        "title": "LLM Sidecar: Export Active Profile"
+      },
+      {
+        "command": "llmSidecar.configureCopilotSecret",
+        "title": "LLM Sidecar: Configure Copilot BYOK Secret"
+      },
+      {
+        "command": "llmSidecar.testProxyChat",
+        "title": "LLM Sidecar: Test Proxy Chat"
+      },
+      {
+        "command": "llmSidecar.setInlineChatModel",
+        "title": "LLM Sidecar: Set Inline Chat Default Model"
+      },
+      {
+        "command": "llmSidecar.refreshModels",
+        "title": "LLM Sidecar: Refresh Model Catalog"
+      },
+      {
+        "command": "llmSidecar.setEndpointApiKey",
+        "title": "LLM Sidecar: Set Endpoint API Key"
+      },
+      {
+        "command": "llmSidecar.clearEndpointApiKey",
+        "title": "LLM Sidecar: Clear Endpoint API Key"
+      },
+      {
+        "command": "llmSidecar.addFirstEndpoint",
+        "title": "LLM Sidecar: Add First Endpoint"
+      },
+      {
+        "command": "llmSidecar.openGettingStarted",
+        "title": "LLM Sidecar: Getting Started",
+        "category": "LLM Sidecar"
+      }
+    ],
+    "configuration": {
+      "title": "LLM Sidecar",
+      "properties": {
+        "llmSidecar.proxyPort": {
+          "type": "number",
+          "default": 3848,
+          "description": "TCP port for the local OpenAI-compatible sidecar-proxy"
+        },
+        "llmSidecar.autoStartProxy": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start sidecar-proxy automatically when the extension activates"
+        },
+        "llmSidecar.autoStartLlama": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start llama-server (local bind model) automatically when the extension activates"
+        },
+        "llmSidecar.autoSyncOnActivate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Sync discovered models to configured targets after the proxy is healthy"
+        },
+        "llmSidecar.enforceHumanInTheLoop": {
+          "type": "boolean",
+          "default": true,
+          "description": "Force VS Code chat tool-approval settings so Copilot must approve each tool before execution (disables global auto-approve)"
+        },
+        "llmSidecar.proxyBinaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the sidecar-proxy binary (empty = auto-detect from extension bin/)"
+        },
+        "llmSidecar.profilesPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional JSON file path with extra adapter profiles (system prompts, tool formats)"
+        },
+        "llmSidecar.modelCachePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional override path for the per-endpoint discovered-models cache file"
+        },
+        "llmSidecar.modelOverrides": {
+          "type": "object",
+          "default": {},
+          "description": "Per-model capability overrides (toolCalling, vision, token limits) merged into the synced catalog"
+        },
+        "llmSidecar.copilotByokSecretId": {
+          "type": "string",
+          "default": "llmSidecar",
+          "description": "chat.lm.secret placeholder id used when syncing models for Copilot BYOK"
+        },
+        "llmSidecar.orchestrator": {
+          "type": "object",
+          "default": {},
+          "description": "Local bind model (llama.cpp): synthesizes grammar-constrained tool calls from upstream reasoning prose. Copilot executes the returned tools.",
+          "properties": {
+            "llamaPort": {
+              "type": "number",
+              "default": 8081,
+              "description": "TCP port for llama-server"
+            },
+            "llamaBaseUrl": {
+              "type": "string",
+              "default": "http://127.0.0.1:8081",
+              "description": "Base URL for llama-server during the bind phase"
+            },
+            "orchestratorModel": {
+              "type": "string",
+              "default": "orchestrator",
+              "description": "Model id alias passed to llama-server; usually leave as orchestrator"
+            },
+            "contextTokenBudget": {
+              "type": "number",
+              "default": 12000,
+              "description": "Max tokens of on-device workspace context (ripgrep hits, open files, diagnostics) injected into upstream reason prompts"
+            },
+            "localOnly": {
+              "type": "boolean",
+              "default": false,
+              "description": "Block all upstream HTTP egress (bind-only mode; no reasoning calls leave the machine)"
+            },
+            "egressAllowlist": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "When non-empty, only these URL prefixes may be used for upstream reasoning requests"
+            },
+            "llamaSlotId": {
+              "type": "number",
+              "default": 0,
+              "description": "llama-server slot id for bind requests"
+            },
+            "llamaServerBinaryPath": {
+              "type": "string",
+              "default": "",
+              "description": "Explicit path to llama-server binary (empty = auto-detect from extension bin/)"
+            },
+            "llamaServerVariant": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "cpu",
+                "cuda12",
+                "cuda13",
+                "vulkan",
+                "metal"
+              ],
+              "default": "auto",
+              "description": "llama-server build variant (auto detects GPU backend)"
+            },
+            "llamaServerInstallDir": {
+              "type": "string",
+              "default": "",
+              "description": "Directory for downloaded llama-server (empty = extension bin/<platform>-<arch>)"
+            },
+            "selectedModelId": {
+              "type": "string",
+              "default": "llama-3.2-3b-instruct-ud-q4",
+              "description": "Local bind model catalog id (grammar-constrained tool-call synthesis)"
+            },
+            "modelPath": {
+              "type": "string",
+              "default": "",
+              "description": "Explicit path to bind-model GGUF file (overrides catalog download; for air-gapped installs)"
+            },
+            "modelMirrorUrl": {
+              "type": "string",
+              "default": "",
+              "description": "Corporate mirror URL for bind-model GGUF download"
+            },
+            "modelMirrorSha256": {
+              "type": "string",
+              "default": "",
+              "description": "SHA-256 hash required when using modelMirrorUrl"
+            },
+            "modelReleaseAsset": {
+              "type": "string",
+              "default": "",
+              "description": "Optional direct URL for bind-model GGUF download (advanced)"
+            },
+            "gpuLayers": {
+              "type": "number",
+              "default": -1,
+              "description": "GPU layers for llama-server (-1 = offload all layers when a GPU backend is available)"
+            },
+            "ctxSize": {
+              "type": "number",
+              "default": 8192,
+              "description": "Context window size passed to llama-server for bind requests"
+            },
+            "maxCandidateTools": {
+              "type": "number",
+              "default": 12,
+              "minimum": 1,
+              "description": "Max tools forwarded to the bind model per turn (smaller sets improve 3B selection accuracy)"
+            },
+            "maxToolCallsPerTurn": {
+              "type": "number",
+              "default": 3,
+              "minimum": 1,
+              "description": "Max parallel tool calls synthesized per turn (each extra call adds one bind round-trip)"
+            }
+          }
+        },
+        "llmSidecar.endpoints": {
+          "type": "array",
+          "default": [],
+          "description": "Upstream reasoning endpoints. Any request that includes tools uses bind-and-return: tools are stripped from upstream, the local bind model synthesizes tool calls, and Copilot executes them.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable endpoint id (used in model catalog and audit log)"
+              },
+              "displayName": {
+                "type": "string",
+                "description": "Human-readable name shown in model pickers"
+              },
+              "upstreamUrl": {
+                "type": "string",
+                "description": "Upstream OpenAI-compatible chat completions URL for the reasoning model"
+              },
+              "adapter": {
+                "type": "string",
+                "enum": [
+                  "openai-pass-through",
+                  "orchestrated-tools"
+                ],
+                "description": "Adapter for plain chat requests without tools. Tool-bearing requests always use bind-and-return regardless of this value."
+              },
+              "adapterProfile": {
+                "type": "string",
+                "description": "Named profile for extra system prompts and default model capabilities"
+              },
+              "apiKeySecretId": {
+                "type": "string",
+                "description": "VS Code secret store id for this endpoint's upstream API key"
+              },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Manual model catalog entries when discovery is disabled"
+              }
+            }
+          }
+        },
+        "llmSidecar.syncTargets": {
+          "type": "array",
+          "default": [
+            {
+              "id": "chatLanguageModels",
+              "enabled": true,
+              "options": {
+                "providerName": "LLM Sidecar"
+              }
+            }
+          ],
+          "description": "Where to publish the merged model catalog (default: VS Code chatLanguageModels.json for Copilot BYOK)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "node scripts/build-extension.mjs",
+    "watch": "node scripts/build-extension.mjs --watch",
+    "lint": "tsc -p . --noEmit",
+    "test": "cargo test -p sidecar-proxy && pnpm run test:ts && pnpm run test:integration",
+    "test:ts": "tsx --test src/**/*.test.ts scripts/**/*.test.mjs",
+    "test:integration": "node scripts/integration-proxy.mjs",
+    "build:proxy": "cargo build --release -p sidecar-proxy && node scripts/copy-proxy.mjs",
+    "build": "pnpm run build:proxy && pnpm run compile",
+    "setup:dev": "node scripts/setup-dev.mjs",
+    "fetch:llama-server": "node scripts/fetch-llama-server.mjs",
+    "fetch:model": "node scripts/fetch-model.mjs",
+    "verify:assets": "node scripts/verify-assets.mjs",
+    "package:offline": "node scripts/package-offline-bundle.mjs",
+    "create-vsix": "pnpm dlx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/vscode": "^1.96.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "pnpm@11.6.0"
+}

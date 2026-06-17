@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/vscode-llm-sidecar/runtime-manifest.schema.json",
+  "title": "LLM Sidecar Runtime Assets Manifest",
+  "type": "object",
+  "required": ["version", "llamaServer", "models"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "llamaServer": {
+      "type": "object",
+      "required": ["releaseTag", "variants", "platforms"],
+      "properties": {
+        "releaseTag": { "type": "string" },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["cpu", "cuda12", "cuda13", "vulkan", "metal"]
+          }
+        },
+        "platforms": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["url", "archiveType", "binaryPathInsideArchive"],
+              "properties": {
+                "url": { "type": "string", "format": "uri" },
+                "archiveType": { "type": "string", "enum": ["zip", "tar.gz"] },
+                "binaryPathInsideArchive": { "type": "string" },
+                "sha256": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "displayName",
+          "filename",
+          "usModelCompliant",
+          "sources"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "displayName": { "type": "string" },
+          "filename": { "type": "string" },
+          "ramHintGb": { "type": "number" },
+          "ctxSizeRecommended": { "type": "number" },
+          "sizeBytes": { "type": "number" },
+          "license": { "type": "string" },
+          "usModelCompliant": { "type": "boolean" },
+          "isDefault": { "type": "boolean" },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "url"],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["huggingface", "github-release", "mirror"]
+                },
+                "url": { "type": "string", "format": "uri" },
+                "sha256": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

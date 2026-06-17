@@ -1,0 +1,10 @@
+node_modules/
+dist/
+target/
+.vscode-test/
+*.vsix
+artifacts/
+.assets/
+.edh-profile-2/
+bin/
+!bin/.gitkeep

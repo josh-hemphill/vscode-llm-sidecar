@@ -1,0 +1,176 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-proxy:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: win32-x64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            platform: darwin-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release -p sidecar-proxy --target ${{ matrix.target }}
+      - name: Stage binary
+        shell: bash
+        run: |
+          mkdir -p artifacts/${{ matrix.platform }}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp target/${{ matrix.target }}/release/sidecar-proxy.exe artifacts/${{ matrix.platform }}/
+          else
+            cp target/${{ matrix.target }}/release/sidecar-proxy artifacts/${{ matrix.platform }}/
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-proxy-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+
+  fetch-llama-server:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win32-x64
+          - os: macos-latest
+            platform: darwin-x64
+          - os: macos-latest
+            platform: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Fetch llama-server (CPU for CI reproducibility)
+        shell: bash
+        run: |
+          node scripts/fetch-llama-server.mjs --variant cpu
+          mkdir -p artifacts/${{ matrix.platform }}
+          cp bin/${{ matrix.platform }}/llama-server* artifacts/${{ matrix.platform }}/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llama-server-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+
+  verify-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test scripts/asset-lib.test.mjs
+      - run: node scripts/verify-assets.mjs --check-remote --remote-only
+
+  package-vsix:
+    needs: [build-proxy, fetch-llama-server, verify-manifest]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - run: node scripts/layout-release-binaries.mjs artifacts
+      - run: pnpm install --frozen-lockfile || pnpm install
+      - run: pnpm run compile
+      - run: npx @vscode/vsce package --no-dependencies
+      - uses: actions/upload-artifact@v4
+        with:
+          name: llm-sidecar-vsix
+          path: "*.vsix"
+
+  package-offline:
+    needs: [build-proxy, fetch-llama-server, package-vsix]
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win32-x64
+          - os: macos-latest
+            platform: darwin-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - run: node scripts/layout-release-binaries.mjs artifacts
+      - run: node scripts/package-offline-bundle.mjs --tier slim
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-bundle-${{ matrix.platform }}
+          path: artifacts/offline/*.zip
+
+  publish-release:
+    needs: [package-vsix, package-offline]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/**/*.vsix
+            release-assets/**/*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-registries:
+    needs: package-vsix
+    runs-on: ubuntu-latest
+    environment: marketplace
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          name: llm-sidecar-vsix
+          path: dist
+      - run: npm install -g @vscode/vsce ovsx
+      - name: Verify VSIX contents
+        run: vsce ls --tree dist/*.vsix
+      - name: Publish to Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: bash scripts/publish-marketplace.sh dist/*.vsix
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: ovsx publish dist/*.vsix -p "$OVSX_PAT"
