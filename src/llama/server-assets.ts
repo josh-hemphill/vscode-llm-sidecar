@@ -203,8 +203,16 @@ export const downloadLlamaServer = async (
     `${asset.platformArch}-${asset.variant}`
   );
 
+  if (options.force && existsSync(archivePath)) {
+    await fs.rm(archivePath, { force: true });
+  }
+
   if (!existsSync(archivePath)) {
     log.appendLine(`Downloading llama-server (${asset.variant}) from ${asset.url}`);
+    const expectedSha256 = asset.sha256?.trim() ?? "";
+    if (!expectedSha256) {
+      throw new Error(`llama-server manifest entry missing sha256: ${asset.url}`);
+    }
     const res = await fetch(asset.url);
     if (!res.ok || !res.body) {
       throw new Error(`llama-server download failed: ${res.status}`);
@@ -230,17 +238,23 @@ export const downloadLlamaServer = async (
       out.end(() => resolve());
       out.on("error", reject);
     });
-    if (asset.sha256?.trim()) {
-      const digest = await sha256File(archivePath);
-      if (digest !== asset.sha256.trim()) {
-        await fs.rm(archivePath, { force: true });
-        throw new Error(
-          `llama-server SHA-256 mismatch (expected ${asset.sha256}, got ${digest})`
-        );
-      }
-    } else {
-      log.appendLine(
-        "Warning: llama-server archive has no sha256 in manifest; skipping verification"
+    const digest = await sha256File(archivePath);
+    if (digest !== expectedSha256.toLowerCase()) {
+      await fs.rm(archivePath, { force: true });
+      throw new Error(
+        `llama-server SHA-256 mismatch (expected ${expectedSha256}, got ${digest})`
+      );
+    }
+  } else {
+    const expectedSha256 = asset.sha256?.trim() ?? "";
+    if (!expectedSha256) {
+      throw new Error(`llama-server manifest entry missing sha256: ${asset.url}`);
+    }
+    const digest = await sha256File(archivePath);
+    if (digest !== expectedSha256.toLowerCase()) {
+      await fs.rm(archivePath, { force: true });
+      throw new Error(
+        `Cached llama-server archive SHA-256 mismatch (expected ${expectedSha256}, got ${digest})`
       );
     }
   }

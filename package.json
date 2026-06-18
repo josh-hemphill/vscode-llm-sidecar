@@ -354,6 +354,7 @@
     "build": "pnpm run build:proxy && pnpm run compile",
     "setup:dev": "node scripts/setup-dev.mjs",
     "fetch:llama-server": "node scripts/fetch-llama-server.mjs",
+    "sync:llama-sha256": "node scripts/sync-llama-sha256.mjs",
     "fetch:model": "node scripts/fetch-model.mjs",
     "verify:assets": "node scripts/verify-assets.mjs",
     "package:offline": "node scripts/package-offline-bundle.mjs",

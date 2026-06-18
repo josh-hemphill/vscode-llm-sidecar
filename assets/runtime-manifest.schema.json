@@ -24,7 +24,7 @@
             "type": "object",
             "additionalProperties": {
               "type": "object",
-              "required": ["url", "archiveType", "binaryPathInsideArchive"],
+              "required": ["url", "archiveType", "binaryPathInsideArchive", "sha256"],
               "properties": {
                 "url": { "type": "string", "format": "uri" },
                 "archiveType": { "type": "string", "enum": ["zip", "tar.gz"] },

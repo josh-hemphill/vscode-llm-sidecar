@@ -6,7 +6,7 @@ export interface RuntimeManifestLlamaAsset {
   url: string;
   archiveType: "zip" | "tar.gz";
   binaryPathInsideArchive: string;
-  sha256?: string;
+  sha256: string;
 }
 
 export interface RuntimeManifest {

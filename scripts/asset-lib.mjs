@@ -258,6 +258,29 @@ const statSafe = (p) => {
   }
 };
 
+/** Ensures a cached archive exists and matches the pinned sha256. */
+const ensureVerifiedArchive = async (
+  url,
+  archivePath,
+  expectedSha256,
+  { onProgress, force = false } = {}
+) => {
+  const hash = expectedSha256?.trim().toLowerCase() ?? "";
+  if (!hash) {
+    throw new Error(`Manifest entry missing sha256: ${url}`);
+  }
+  if (!force && existsSync(archivePath)) {
+    const digest = await sha256File(archivePath);
+    if (digest === hash) {
+      return;
+    }
+    rmSync(archivePath, { force: true });
+  } else if (force && existsSync(archivePath)) {
+    rmSync(archivePath, { force: true });
+  }
+  await downloadFile(url, archivePath, { onProgress, expectedSha256: hash });
+};
+
 /** Downloads and installs llama-server into destDir (bin/platform-arch). */
 export const installLlamaServer = async (
   manifest,
@@ -279,9 +302,10 @@ export const installLlamaServer = async (
   const archivePath = join(cacheDir, archiveName);
   const extractDir = join(cacheDir, `${asset.platformArch}-${asset.variant}`);
 
-  if (!existsSync(archivePath)) {
-    await downloadFile(asset.url, archivePath, { onProgress });
-  }
+  await ensureVerifiedArchive(asset.url, archivePath, asset.sha256, {
+    onProgress,
+    force,
+  });
 
   rmSync(extractDir, { recursive: true, force: true });
   mkdirSync(extractDir, { recursive: true });
@@ -357,6 +381,24 @@ export const validateRuntimeManifest = (manifest) => {
       }
       if (!variants.cpu?.url) {
         errors.push(`llamaServer.platforms.${platformArch}.cpu.url is required`);
+      }
+      for (const [variantName, entry] of Object.entries(variants)) {
+        if (!entry?.url) {
+          errors.push(
+            `llamaServer.platforms.${platformArch}.${variantName} missing url`
+          );
+          continue;
+        }
+        const hash = entry.sha256?.trim() ?? "";
+        if (!hash) {
+          errors.push(
+            `llamaServer.platforms.${platformArch}.${variantName} missing sha256`
+          );
+        } else if (!sha256Re.test(hash)) {
+          errors.push(
+            `llamaServer.platforms.${platformArch}.${variantName} invalid sha256`
+          );
+        }
       }
     }
   }

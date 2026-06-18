@@ -2,71 +2,88 @@
   "version": 1,
   "llamaServer": {
     "releaseTag": "b9283",
-    "variants": ["cpu", "cuda12", "cuda13", "vulkan", "metal"],
+    "variants": [
+      "cpu",
+      "cuda12",
+      "cuda13",
+      "vulkan",
+      "metal"
+    ],
     "platforms": {
       "win32-x64": {
         "cpu": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-win-cpu-x64.zip",
           "archiveType": "zip",
-          "binaryPathInsideArchive": "llama-server.exe"
+          "binaryPathInsideArchive": "llama-server.exe",
+          "sha256": "07279a47c9a904e202e36cda7c80ac345b6c3f0829c1cc199bdf1311e4a2f03b"
         },
         "cuda12": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-win-cuda-12.4-x64.zip",
           "archiveType": "zip",
-          "binaryPathInsideArchive": "llama-server.exe"
+          "binaryPathInsideArchive": "llama-server.exe",
+          "sha256": "6da0c1a95965dc00a80eb00e03cf4a6cb55a2852c421b9267764c4ecfc56b8fb"
         },
         "cuda13": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-win-cuda-13.1-x64.zip",
           "archiveType": "zip",
-          "binaryPathInsideArchive": "llama-server.exe"
+          "binaryPathInsideArchive": "llama-server.exe",
+          "sha256": "f00bc5f22bac8279c902cdc59923eb2ab04345894e9d64347a436d7ac8b15f1b"
         },
         "vulkan": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-win-vulkan-x64.zip",
           "archiveType": "zip",
-          "binaryPathInsideArchive": "llama-server.exe"
+          "binaryPathInsideArchive": "llama-server.exe",
+          "sha256": "9bdcd36d3113587975829c2a4439dc0e1f3d5cf41c2629140de5adb8f8c2a004"
         }
       },
       "win32-arm64": {
         "cpu": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-win-cpu-arm64.zip",
           "archiveType": "zip",
-          "binaryPathInsideArchive": "llama-server.exe"
+          "binaryPathInsideArchive": "llama-server.exe",
+          "sha256": "1979ab8360c7188772ef1c891db80ad858dc3c562902f7e52739b7a859fc6397"
         }
       },
       "linux-x64": {
         "cpu": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-ubuntu-x64.tar.gz",
           "archiveType": "tar.gz",
-          "binaryPathInsideArchive": "llama-server"
+          "binaryPathInsideArchive": "llama-server",
+          "sha256": "cb0a1c72bfb20ae7d232f155626eeecbb1a61267804e305987ad992e13324c95"
         },
         "cuda12": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-ubuntu-x64.tar.gz",
           "archiveType": "tar.gz",
-          "binaryPathInsideArchive": "llama-server"
+          "binaryPathInsideArchive": "llama-server",
+          "sha256": "cb0a1c72bfb20ae7d232f155626eeecbb1a61267804e305987ad992e13324c95"
         }
       },
       "darwin-x64": {
         "metal": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-macos-x64.tar.gz",
           "archiveType": "tar.gz",
-          "binaryPathInsideArchive": "llama-server"
+          "binaryPathInsideArchive": "llama-server",
+          "sha256": "e14f97e112eec987a821a64fc95314024dcea8eaef30876eb2a3d59cc389e1aa"
         },
         "cpu": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-macos-x64.tar.gz",
           "archiveType": "tar.gz",
-          "binaryPathInsideArchive": "llama-server"
+          "binaryPathInsideArchive": "llama-server",
+          "sha256": "e14f97e112eec987a821a64fc95314024dcea8eaef30876eb2a3d59cc389e1aa"
         }
       },
       "darwin-arm64": {
         "metal": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-macos-arm64.tar.gz",
           "archiveType": "tar.gz",
-          "binaryPathInsideArchive": "llama-server"
+          "binaryPathInsideArchive": "llama-server",
+          "sha256": "115072862ff131c535b05090d55e4410f5e09539ee21f819b949bf94221692d3"
         },
         "cpu": {
           "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9283/llama-b9283-bin-macos-arm64.tar.gz",
           "archiveType": "tar.gz",
-          "binaryPathInsideArchive": "llama-server"
+          "binaryPathInsideArchive": "llama-server",
+          "sha256": "115072862ff131c535b05090d55e4410f5e09539ee21f819b949bf94221692d3"
         }
       }
     }
