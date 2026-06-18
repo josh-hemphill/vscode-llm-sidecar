@@ -7,6 +7,7 @@ import {
   platformArchDir,
   resolveLlamaServerAsset,
   resolveModelSources,
+  validateRuntimeManifest,
 } from "./asset-lib.mjs";
 
 test("loadManifest parses runtime manifest", () => {
@@ -15,6 +16,12 @@ test("loadManifest parses runtime manifest", () => {
   assert.ok(manifest.llamaServer?.platforms);
   assert.ok(Array.isArray(manifest.models));
   assert.equal(manifest.models.length, 2);
+});
+
+test("validateRuntimeManifest accepts bundled manifest", () => {
+  const manifest = loadManifest();
+  const errors = validateRuntimeManifest(manifest);
+  assert.deepEqual(errors, []);
 });
 
 test("getModelEntry resolves default model", () => {

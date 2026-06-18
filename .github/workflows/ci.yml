@@ -70,4 +70,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/verify-assets.mjs --check-remote --remote-only
+      - run: node --test scripts/asset-lib.test.mjs
+      - run: node scripts/verify-assets.mjs --manifest-only

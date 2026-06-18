@@ -9,6 +9,7 @@ import {
   loadManifest,
   platformArchDir,
   llamaServerExeName,
+  validateRuntimeManifest,
 } from "./asset-lib.mjs";
 
 const args = process.argv.slice(2);
@@ -19,8 +20,26 @@ const getFlag = (name) => {
 };
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const manifest = loadManifest(getFlag("--manifest"));
+const manifestPath = getFlag("--manifest");
+const manifest = loadManifest(manifestPath);
 const checkRemote = hasFlag("--check-remote");
+const manifestOnly = hasFlag("--manifest-only");
+
+if (manifestOnly) {
+  const errors = validateRuntimeManifest(manifest);
+  if (errors.length > 0) {
+    console.error("Manifest validation failed:");
+    for (const err of errors) {
+      console.error(`  - ${err}`);
+    }
+    process.exit(1);
+  }
+  const modelCount = manifest.models?.length ?? 0;
+  console.log(
+    `Manifest OK (version ${manifest.version}, ${modelCount} model(s), ${manifestPath ?? "assets/runtime-manifest.json"})`
+  );
+  process.exit(0);
+}
 
 const sha256File = async (filePath) =>
   new Promise((resolve, reject) => {
@@ -91,6 +110,11 @@ for (const model of manifest.models) {
 }
 
 console.log("\nAsset verification\n");
+if (hasFlag("--remote-only")) {
+  console.log(
+    "Note: local MISSING rows are informational; only UNREACHABLE remote URLs fail this run.\n"
+  );
+}
 console.log("Asset\tStatus\tPath");
 for (const row of rows) {
   console.log(`${row.asset}\t${row.status}\t${row.path}`);
@@ -100,10 +124,10 @@ if (hasFlag("--json")) {
   console.log(JSON.stringify(rows, null, 2));
 }
 
-const missing = rows.filter((r) => {
+const failures = rows.filter((r) => {
   if (hasFlag("--remote-only")) {
     return r.status === "UNREACHABLE";
   }
   return r.status.startsWith("MISSING") || r.status === "UNREACHABLE";
 });
-process.exitCode = missing.length > 0 ? 1 : 0;
+process.exitCode = failures.length > 0 ? 1 : 0;

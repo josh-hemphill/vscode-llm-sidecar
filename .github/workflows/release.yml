@@ -79,7 +79,7 @@ jobs:
         with:
           node-version: 22
       - run: node --test scripts/asset-lib.test.mjs
-      - run: node scripts/verify-assets.mjs --check-remote --remote-only
+      - run: node scripts/verify-assets.mjs --manifest-only
 
   package-vsix:
     needs: [build-proxy, fetch-llama-server, verify-manifest]

@@ -334,11 +334,97 @@ export const installModel = async (
   throw lastError ?? new Error(`Failed to download model ${modelId}`);
 };
 
-/** HEAD-checks a remote URL. */
+/** Validates runtime manifest structure and pinned checksums (no network or local binaries). */
+export const validateRuntimeManifest = (manifest) => {
+  const errors = [];
+  const sha256Re = /^[a-f0-9]{64}$/i;
+
+  if (!manifest || typeof manifest !== "object") {
+    return ["manifest must be an object"];
+  }
+  if (typeof manifest.version !== "number" || manifest.version < 1) {
+    errors.push("manifest.version must be a positive integer");
+  }
+
+  const platforms = manifest.llamaServer?.platforms;
+  if (!platforms || typeof platforms !== "object") {
+    errors.push("llamaServer.platforms is required");
+  } else {
+    for (const [platformArch, variants] of Object.entries(platforms)) {
+      if (!variants || typeof variants !== "object") {
+        errors.push(`llamaServer.platforms.${platformArch} must be an object`);
+        continue;
+      }
+      if (!variants.cpu?.url) {
+        errors.push(`llamaServer.platforms.${platformArch}.cpu.url is required`);
+      }
+    }
+  }
+
+  const models = manifest.models;
+  if (!Array.isArray(models) || models.length === 0) {
+    errors.push("models must be a non-empty array");
+  } else {
+    for (const model of models) {
+      const label = model.id ?? "(unknown model)";
+      if (!model.id) {
+        errors.push("model entry missing id");
+      }
+      if (!model.filename) {
+        errors.push(`${label}: missing filename`);
+      }
+      if (!Array.isArray(model.sources) || model.sources.length === 0) {
+        errors.push(`${label}: sources required`);
+        continue;
+      }
+      let hasVerifiedSource = false;
+      for (const src of model.sources) {
+        if (!src.url || !/^https?:\/\//.test(src.url)) {
+          errors.push(`${label}: invalid source url`);
+          continue;
+        }
+        const hash = src.sha256?.trim() ?? "";
+        if (!hash) {
+          errors.push(`${label}: source ${src.kind} missing sha256`);
+        } else if (!sha256Re.test(hash)) {
+          errors.push(`${label}: invalid sha256 on source ${src.kind}`);
+        } else {
+          hasVerifiedSource = true;
+        }
+      }
+      if (!hasVerifiedSource) {
+        errors.push(`${label}: no source with valid sha256`);
+      }
+    }
+  }
+
+  return errors;
+};
+
+/** Probes a remote URL (HEAD, then ranged GET for hosts that reject HEAD). */
 export const checkRemoteUrl = async (url) => {
   try {
-    const res = await fetch(url, { method: "HEAD" });
-    return res.ok;
+    const headers = {};
+    const hfToken = process.env.HF_TOKEN?.trim();
+    if (hfToken) {
+      headers.Authorization = `Bearer ${hfToken}`;
+    }
+    let res = await fetch(url, {
+      method: "HEAD",
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.ok) {
+      return true;
+    }
+    res = await fetch(url, {
+      method: "GET",
+      headers: { ...headers, Range: "bytes=0-0" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(30_000),
+    });
+    return res.ok || res.status === 206;
   } catch {
     return false;
   }
