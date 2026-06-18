@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
@@ -16,6 +16,26 @@ export const isLlamaRuntimeBundleComplete = (installDir: string): boolean => {
     return existsSync(path.join(installDir, "llama-server-impl.dll"));
   }
   return true;
+};
+
+/** Resolves the directory containing llama-server after archive extraction. */
+export const resolveLlamaBundleRoot = (extractDir: string): string => {
+  const entries = readdirSync(extractDir);
+  let fileCount = 0;
+  const subdirs: string[] = [];
+  for (const name of entries) {
+    const full = path.join(extractDir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) {
+      subdirs.push(name);
+    } else if (st.isFile()) {
+      fileCount += 1;
+    }
+  }
+  if (fileCount === 0 && subdirs.length === 1) {
+    return path.join(extractDir, subdirs[0]!);
+  }
+  return extractDir;
 };
 
 const copyTree = async (srcDir: string, destDir: string): Promise<number> => {
@@ -43,8 +63,9 @@ export const copyLlamaRuntimeBundle = async (
   extractDir: string,
   installDir: string
 ): Promise<number> => {
+  const bundleRoot = resolveLlamaBundleRoot(extractDir);
   await fs.mkdir(installDir, { recursive: true });
-  return copyTree(extractDir, installDir);
+  return copyTree(bundleRoot, installDir);
 };
 
 export const windowsDllMissingExitCode = 3221225781;

@@ -270,6 +270,11 @@ export const downloadLlamaServer = async (
 
   await fs.mkdir(installDir, { recursive: true });
   const copied = await copyLlamaRuntimeBundle(extractDir, installDir);
+  if (!isLlamaRuntimeBundleComplete(installDir)) {
+    throw new Error(
+      `llama-server bundle incomplete after install (expected ${exeDest})`
+    );
+  }
   if (process.platform !== "win32") {
     execSync(`chmod +x "${exeDest}"`);
   }

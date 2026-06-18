@@ -7,6 +7,7 @@ import {
   describeLlamaExitCode,
   isLlamaRuntimeBundleComplete,
   llamaServerBinaryName,
+  resolveLlamaBundleRoot,
 } from "./runtime-bundle.ts";
 
 test("isLlamaRuntimeBundleComplete requires impl dll on Windows", () => {
@@ -42,6 +43,37 @@ test("copyLlamaRuntimeBundle copies all files from extract dir", async () => {
   }
   const copied = await copyLlamaRuntimeBundle(extractDir, installDir);
   assert.equal(copied, process.platform === "win32" ? 3 : 2);
+  assert.equal(isLlamaRuntimeBundleComplete(installDir), true);
+  rmSync(extractDir, { recursive: true, force: true });
+  rmSync(installDir, { recursive: true, force: true });
+});
+
+test("resolveLlamaBundleRoot unwraps single top-level directory", () => {
+  const extractDir = join(process.cwd(), ".tmp-runtime-wrapper");
+  const wrapperDir = join(extractDir, "llama-b9283");
+  rmSync(extractDir, { recursive: true, force: true });
+  mkdirSync(wrapperDir, { recursive: true });
+  writeFileSync(join(wrapperDir, llamaServerBinaryName()), "exe");
+  assert.equal(resolveLlamaBundleRoot(extractDir), wrapperDir);
+  rmSync(extractDir, { recursive: true, force: true });
+});
+
+test("copyLlamaRuntimeBundle flattens wrapped tar layout", async () => {
+  const extractDir = join(process.cwd(), ".tmp-runtime-wrapper-extract");
+  const installDir = join(process.cwd(), ".tmp-runtime-wrapper-install");
+  const wrapperDir = join(extractDir, "llama-b9283");
+  rmSync(extractDir, { recursive: true, force: true });
+  rmSync(installDir, { recursive: true, force: true });
+  mkdirSync(wrapperDir, { recursive: true });
+  const exeName = llamaServerBinaryName();
+  writeFileSync(join(wrapperDir, exeName), "exe");
+  if (process.platform === "win32") {
+    writeFileSync(join(wrapperDir, "llama-server-impl.dll"), "impl");
+  } else {
+    writeFileSync(join(wrapperDir, "libllama-server-impl.so"), "impl");
+  }
+  const copied = await copyLlamaRuntimeBundle(extractDir, installDir);
+  assert.equal(copied, 2);
   assert.equal(isLlamaRuntimeBundleComplete(installDir), true);
   rmSync(extractDir, { recursive: true, force: true });
   rmSync(installDir, { recursive: true, force: true });

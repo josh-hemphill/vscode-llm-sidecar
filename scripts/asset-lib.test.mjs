@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import {
+  copyLlamaRuntimeBundle,
   detectLlamaVariant,
   getModelEntry,
   loadManifest,
   platformArchDir,
+  resolveLlamaBundleRoot,
   resolveLlamaServerAsset,
   resolveModelSources,
   validateRuntimeManifest,
@@ -69,4 +73,30 @@ test("detectLlamaVariant returns a known variant", () => {
 
 test("platformArchDir matches process", () => {
   assert.equal(platformArchDir(), `${process.platform}-${process.arch}`);
+});
+
+test("resolveLlamaBundleRoot unwraps single top-level directory", () => {
+  const extractDir = join(process.cwd(), ".tmp-llama-bundle-root");
+  const wrapperDir = join(extractDir, "llama-b9283");
+  rmSync(extractDir, { recursive: true, force: true });
+  mkdirSync(wrapperDir, { recursive: true });
+  writeFileSync(join(wrapperDir, "llama-server"), "exe");
+  assert.equal(resolveLlamaBundleRoot(extractDir), wrapperDir);
+  rmSync(extractDir, { recursive: true, force: true });
+});
+
+test("copyLlamaRuntimeBundle flattens wrapped tar layout", () => {
+  const extractDir = join(process.cwd(), ".tmp-llama-bundle-extract");
+  const installDir = join(process.cwd(), ".tmp-llama-bundle-install");
+  const wrapperDir = join(extractDir, "llama-b9283");
+  rmSync(extractDir, { recursive: true, force: true });
+  rmSync(installDir, { recursive: true, force: true });
+  mkdirSync(wrapperDir, { recursive: true });
+  writeFileSync(join(wrapperDir, "llama-server"), "exe");
+  writeFileSync(join(wrapperDir, "libllama-server-impl.dylib"), "impl");
+  const copied = copyLlamaRuntimeBundle(extractDir, installDir);
+  assert.equal(copied, 2);
+  assert.ok(existsSync(join(installDir, "llama-server")));
+  rmSync(extractDir, { recursive: true, force: true });
+  rmSync(installDir, { recursive: true, force: true });
 });

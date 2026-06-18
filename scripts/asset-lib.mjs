@@ -36,19 +36,50 @@ export const isLlamaRuntimeBundleComplete = (destDir) => {
   return true;
 };
 
-/** Copies all files from an extracted llama.cpp archive into the install dir. */
-export const copyLlamaRuntimeBundle = (extractDir, destDir) => {
+/** Resolves the directory containing llama-server after archive extraction. */
+export const resolveLlamaBundleRoot = (extractDir) => {
+  const entries = readdirSync(extractDir);
+  let fileCount = 0;
+  const subdirs = [];
+  for (const name of entries) {
+    const full = join(extractDir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) {
+      subdirs.push(name);
+    } else if (st.isFile()) {
+      fileCount += 1;
+    }
+  }
+  if (fileCount === 0 && subdirs.length === 1) {
+    return join(extractDir, subdirs[0]);
+  }
+  return extractDir;
+};
+
+const copyTreeSync = (srcDir, destDir) => {
   mkdirSync(destDir, { recursive: true });
   let copied = 0;
-  for (const name of readdirSync(extractDir)) {
-    const src = join(extractDir, name);
-    if (!statSync(src).isFile()) {
+  for (const name of readdirSync(srcDir)) {
+    const src = join(srcDir, name);
+    const dest = join(destDir, name);
+    const st = statSync(src);
+    if (st.isDirectory()) {
+      copied += copyTreeSync(src, dest);
       continue;
     }
-    copyFileSync(src, join(destDir, name));
+    if (!st.isFile()) {
+      continue;
+    }
+    copyFileSync(src, dest);
     copied += 1;
   }
   return copied;
+};
+
+/** Copies all files from an extracted llama.cpp archive into the install dir. */
+export const copyLlamaRuntimeBundle = (extractDir, destDir) => {
+  const bundleRoot = resolveLlamaBundleRoot(extractDir);
+  return copyTreeSync(bundleRoot, destDir);
 };
 
 /** Reads and parses the runtime assets manifest. */
@@ -320,6 +351,11 @@ export const installLlamaServer = async (
 
   mkdirSync(destDir, { recursive: true });
   const copied = copyLlamaRuntimeBundle(extractDir, destDir);
+  if (!isLlamaRuntimeBundleComplete(destDir)) {
+    throw new Error(
+      `llama-server bundle incomplete after install (expected ${exeDest})`
+    );
+  }
   if (process.platform !== "win32") {
     execSync(`chmod +x "${exeDest}"`);
   }
