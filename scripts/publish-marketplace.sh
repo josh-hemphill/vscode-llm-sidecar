@@ -8,4 +8,9 @@ if [[ -z "${VSCE_PAT:-}" ]]; then
   exit 1
 fi
 
-vsce publish "$VSIX" --pat "$VSCE_PAT"
+if [[ ! -f "$VSIX" ]]; then
+  echo "publish-marketplace: VSIX not found: $VSIX" >&2
+  exit 1
+fi
+
+vsce publish --packagePath "$VSIX" --pat "$VSCE_PAT"
