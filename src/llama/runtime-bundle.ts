@@ -2,12 +2,13 @@ import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
-const llamaServerExeName = (): string =>
+/** Returns the platform-specific llama-server executable filename. */
+export const llamaServerBinaryName = (): string =>
   process.platform === "win32" ? "llama-server.exe" : "llama-server";
 
 /** Returns true when the installed llama-server bundle can run. */
 export const isLlamaRuntimeBundleComplete = (installDir: string): boolean => {
-  const exePath = path.join(installDir, llamaServerExeName());
+  const exePath = path.join(installDir, llamaServerBinaryName());
   if (!existsSync(exePath)) {
     return false;
   }
