@@ -23,7 +23,7 @@ jobs:
             platform: darwin-arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -37,7 +37,7 @@ jobs:
           else
             cp target/${{ matrix.target }}/release/sidecar-proxy artifacts/${{ matrix.platform }}/
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sidecar-proxy-${{ matrix.platform }}
           path: artifacts/${{ matrix.platform }}
@@ -56,17 +56,17 @@ jobs:
             platform: darwin-arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 26
       - name: Fetch llama-server (CPU for CI reproducibility)
         shell: bash
         run: |
           node scripts/fetch-llama-server.mjs --variant cpu
           mkdir -p artifacts/${{ matrix.platform }}
           cp bin/${{ matrix.platform }}/llama-server* artifacts/${{ matrix.platform }}/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: llama-server-${{ matrix.platform }}
           path: artifacts/${{ matrix.platform }}
@@ -74,10 +74,10 @@ jobs:
   verify-manifest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 26
       - run: node --test scripts/asset-lib.test.mjs
       - run: node scripts/verify-assets.mjs --manifest-only
 
@@ -85,22 +85,20 @@ jobs:
     needs: [build-proxy, fetch-llama-server, verify-manifest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          node-version: 26
           cache: pnpm
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - run: node scripts/layout-release-binaries.mjs artifacts
       - run: pnpm install --frozen-lockfile || pnpm install
       - run: pnpm run compile
       - run: npx @vscode/vsce package --no-dependencies
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: llm-sidecar-vsix
           path: "*.vsix"
@@ -118,16 +116,16 @@ jobs:
             platform: darwin-x64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-      - uses: actions/download-artifact@v4
+          node-version: 26
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - run: node scripts/layout-release-binaries.mjs artifacts
       - run: node scripts/package-offline-bundle.mjs --tier slim
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: offline-bundle-${{ matrix.platform }}
           path: artifacts/offline/*.zip
@@ -137,10 +135,10 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release-assets
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             release-assets/**/*.vsix
@@ -155,11 +153,11 @@ jobs:
     environment: marketplace
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: "22"
-      - uses: actions/download-artifact@v4
+          node-version: "26"
+      - uses: actions/download-artifact@v8
         with:
           name: llm-sidecar-vsix
           path: dist
