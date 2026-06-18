@@ -262,7 +262,7 @@ async fn transform_sse_response(
             }
             while let Some(event) = take_sse_data_event(&mut buffer) {
                 if event == "[DONE]" {
-                    yield Ok::<_, std::convert::Infallible>(format!("data: [DONE]\n\n"));
+                    yield Ok::<_, std::convert::Infallible>("data: [DONE]\n\n".to_string());
                     continue;
                 }
                 if let Ok(mut parsed) = serde_json::from_str::<Value>(&event) {

@@ -48,7 +48,7 @@ fn input_to_messages(input: &Value) -> Vec<Value> {
         Value::String(text) => vec![json!({ "role": "user", "content": text })],
         Value::Array(items) => items
             .iter()
-            .filter_map(|item| input_item_to_message(item))
+            .filter_map(input_item_to_message)
             .collect(),
         _ => vec![json!({ "role": "user", "content": input.to_string() })],
     }

@@ -133,7 +133,7 @@ pub struct EndpointConfig {
     pub models: Vec<ModelConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ProxyConfigPayload {
     #[serde(default)]
@@ -253,16 +253,6 @@ fn url_matches_allowlist(url: &str, allowed: &str) -> bool {
         return true;
     }
     path.starts_with(allowed_path)
-}
-
-impl Default for ProxyConfigPayload {
-    fn default() -> Self {
-        Self {
-            profiles: HashMap::new(),
-            endpoints: vec![],
-            orchestrator: OrchestratorConfig::default(),
-        }
-    }
 }
 
 #[cfg(test)]

@@ -350,10 +350,8 @@ async fn bind_single_tool_call(
 fn parse_stage_two_output(raw: &str) -> Option<(String, String)> {
     let parsed: Value = serde_json::from_str(raw.trim()).ok()?;
     if let Some(kind) = parsed.get("kind").and_then(|k| k.as_str()) {
-        if let Ok(bind) = parse_bind_output(&parsed) {
-            if let BindOutput::ToolCall { name, arguments } = bind {
-                return Some((name, arguments));
-            }
+        if let Ok(BindOutput::ToolCall { name, arguments }) = parse_bind_output(&parsed) {
+            return Some((name, arguments));
         }
         if kind != "tool_call" {
             return None;

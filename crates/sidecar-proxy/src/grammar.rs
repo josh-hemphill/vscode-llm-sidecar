@@ -2,10 +2,12 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GrammarPayload {
+    #[allow(dead_code)]
     pub tool_set_hash: String,
     pub json_schema: Value,
+    #[allow(dead_code)]
     pub gbnf: String,
 }
 
@@ -98,8 +100,7 @@ fn compile_schema_node(schema: &Value, name: &str, rules: &mut HashMap<String, S
             .enumerate()
             .map(|(i, s)| {
                 let alt_name = format!("{name}_alt{i}");
-                let compiled = compile_schema_node(s, &alt_name, rules);
-                compiled
+                compile_schema_node(s, &alt_name, rules)
             })
             .collect();
         return alts.join(" | ");

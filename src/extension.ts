@@ -20,11 +20,7 @@ import {
   trackBootstrap,
 } from "./proxy/process.ts";
 import { disposeOutputChannel } from "./proxy/output-channel.ts";
-import { runProxyDiagnostics } from "./proxy/diagnose.ts";
-import {
-  isCopilotByokSecretLikelyMissing,
-  openCopilotByokSetup,
-} from "./secrets/byok.ts";
+import { isCopilotByokSecretLikelyMissing } from "./secrets/byok.ts";
 import { runSyncTargets } from "./sync/registry.ts";
 import { refreshSidecarStatusBar } from "./status/refresh.ts";
 

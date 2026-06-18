@@ -29,7 +29,6 @@ import { writeProxyConfigFile } from "./config-file.ts";
 import { probeProxyHealth } from "./health.ts";
 import { appendAuditEntry } from "../compliance/audit.ts";
 import { withLifecycleLock } from "./lifecycle-mutex.ts";
-import { getOutputChannel } from "./output-channel.ts";
 import { clearProxyOwner, readProxyOwner, writeProxyOwner } from "./owner.ts";
 import { stripAnsi } from "./strip-ansi.ts";
 import {
