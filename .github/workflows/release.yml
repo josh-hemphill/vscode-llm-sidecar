@@ -63,7 +63,7 @@ jobs:
       - name: Fetch llama-server (CPU for CI reproducibility)
         shell: bash
         run: |
-          node scripts/fetch-llama-server.mjs --variant cpu
+          node scripts/fetch-llama-server.mjs --variant cpu --platform ${{ matrix.platform }}
           mkdir -p artifacts/${{ matrix.platform }}
           cp bin/${{ matrix.platform }}/llama-server* artifacts/${{ matrix.platform }}/
       - uses: actions/upload-artifact@v7

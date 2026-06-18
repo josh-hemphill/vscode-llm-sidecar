@@ -75,6 +75,16 @@ test("platformArchDir matches process", () => {
   assert.equal(platformArchDir(), `${process.platform}-${process.arch}`);
 });
 
+test("resolveLlamaServerAsset honors explicit platformArch", () => {
+  const manifest = loadManifest();
+  const asset = resolveLlamaServerAsset(manifest, {
+    variant: "cpu",
+    platformArch: "darwin-x64",
+  });
+  assert.equal(asset.platformArch, "darwin-x64");
+  assert.ok(asset.url.includes("macos-x64"));
+});
+
 test("resolveLlamaBundleRoot unwraps single top-level directory", () => {
   const extractDir = join(process.cwd(), ".tmp-llama-bundle-root");
   const wrapperDir = join(extractDir, "llama-b9283");

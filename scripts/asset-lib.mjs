@@ -316,9 +316,9 @@ const ensureVerifiedArchive = async (
 export const installLlamaServer = async (
   manifest,
   destDir,
-  { variant = "auto", force = false, onProgress } = {}
+  { variant = "auto", force = false, onProgress, platformArch = platformArchDir() } = {}
 ) => {
-  const asset = resolveLlamaServerAsset(manifest, { variant });
+  const asset = resolveLlamaServerAsset(manifest, { variant, platformArch });
   const exeDest = join(destDir, llamaServerExeName());
   if (
     isLlamaRuntimeBundleComplete(destDir) &&
