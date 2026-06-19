@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Optimize llama args, fix prompt, fix bundle
+
 ## 0.1.0
 
 - Initial release: bind-and-return tool orchestration via llama.cpp

@@ -2,7 +2,7 @@
   "name": "llm-sidecar",
   "displayName": "LLM Sidecar",
   "description": "Bind-and-return tool orchestration for Copilot BYOK: local llama.cpp sidecar synthesizes tool calls so upstream models only reason in prose; Copilot executes tools with Human-in-the-Loop approval.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "jo-hemphill",
   "icon": "media/icon.png",
   "license": "MIT",
@@ -264,19 +264,32 @@
             },
             "kvCacheType": {
               "type": "string",
-              "enum": ["auto", "f16", "q8_0", "q4_0"],
+              "enum": [
+                "auto",
+                "f16",
+                "q8_0",
+                "q4_0"
+              ],
               "default": "auto",
               "description": "KV cache quantization for llama-server (auto picks q4_0/q8_0 on low-RAM laptops)"
             },
             "flashAttention": {
               "type": "string",
-              "enum": ["auto", "on", "off"],
+              "enum": [
+                "auto",
+                "on",
+                "off"
+              ],
               "default": "auto",
               "description": "Flash attention for llama-server (auto enables on Metal/CUDA/Vulkan)"
             },
             "fitDeviceMemory": {
               "type": "string",
-              "enum": ["auto", "on", "off"],
+              "enum": [
+                "auto",
+                "on",
+                "off"
+              ],
               "default": "auto",
               "description": "Let llama-server fit GPU layers and context to device memory (auto on <=16GB RAM)"
             },
@@ -305,7 +318,11 @@
             },
             "llamaStartMode": {
               "type": "string",
-              "enum": ["onActivate", "onDemand", "manual"],
+              "enum": [
+                "onActivate",
+                "onDemand",
+                "manual"
+              ],
               "default": "onActivate",
               "description": "When to start llama-server: onActivate (default), onDemand (first tool call; saves RAM), or manual"
             },
