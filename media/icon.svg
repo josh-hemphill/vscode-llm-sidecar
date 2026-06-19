@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="LLM Sidecar">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="main" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="sidecar" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#0891b2"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="24" fill="url(#bg)"/>
+
+  <!-- Main editor pane -->
+  <rect x="18" y="28" width="52" height="72" rx="10" fill="url(#main)"/>
+  <rect x="28" y="42" width="28" height="4" rx="2" fill="#dbeafe" opacity="0.9"/>
+  <rect x="28" y="52" width="32" height="4" rx="2" fill="#dbeafe" opacity="0.75"/>
+  <rect x="28" y="62" width="22" height="4" rx="2" fill="#dbeafe" opacity="0.6"/>
+  <text x="42" y="88" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" fill="#eff6ff" text-anchor="middle">&lt;/&gt;</text>
+
+  <!-- Sidecar companion -->
+  <rect x="74" y="44" width="36" height="56" rx="10" fill="url(#sidecar)"/>
+  <circle cx="86" cy="62" r="4" fill="#ecfeff"/>
+  <circle cx="98" cy="74" r="4" fill="#ecfeff"/>
+  <circle cx="86" cy="86" r="4" fill="#ecfeff"/>
+  <line x1="86" y1="62" x2="98" y2="74" stroke="#ecfeff" stroke-width="2" stroke-linecap="round"/>
+  <line x1="98" y1="74" x2="86" y2="86" stroke="#ecfeff" stroke-width="2" stroke-linecap="round"/>
+  <line x1="86" y1="62" x2="86" y2="86" stroke="#ecfeff" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Bridge between panes -->
+  <path d="M70 64 H74" stroke="#67e8f9" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="72" cy="64" r="2.5" fill="#a5f3fc"/>
+</svg>

@@ -78,9 +78,29 @@ Full contributor bootstrap: `pnpm run setup:dev` (see [docs/CONTRIBUTING.md](doc
 | `llmSidecar.orchestrator.modelMirrorUrl` | Corporate mirror for model download |
 | `llmSidecar.enforceHumanInTheLoop` | Disable YOLO / force per-tool approval |
 | `llmSidecar.orchestrator.localOnly` | Block all upstream egress |
-| `llmSidecar.orchestrator.ctxSize` | llama-server context window for bind requests (raise on machines with more RAM; model supports up to ~128K) |
+| `llmSidecar.orchestrator.ctxSize` | llama-server context for bind (`0` = auto from RAM tier) |
+| `llmSidecar.orchestrator.kvCacheType` | KV cache quant: `auto`, `f16`, `q8_0`, `q4_0` (`auto` uses `q4_0` on ≤8GB laptops) |
+| `llmSidecar.orchestrator.flashAttention` | Flash attention: `auto`, `on`, `off` (`auto` on Metal/CUDA/Vulkan) |
+| `llmSidecar.orchestrator.fitDeviceMemory` | Let llama-server fit layers/ctx to GPU memory (`auto` on ≤16GB RAM) |
+| `llmSidecar.orchestrator.fitTargetMib` | IDE headroom (MiB) when fit is enabled (default 1536) |
+| `llmSidecar.orchestrator.batchSize` / `ubatchSize` | llama-server batch caps (`0` = auto from RAM tier) |
+| `llmSidecar.orchestrator.mlock` | Pin model in RAM (not recommended on ≤8GB unified-memory laptops) |
+| `llmSidecar.orchestrator.llamaStartMode` | `onActivate` (default), `onDemand` (first tool call), or `manual` |
+| `llmSidecar.orchestrator.llamaIdleTimeoutSec` | Stop owned llama-server after N idle seconds (`0` = disabled; pairs with `onDemand`) |
 | `llmSidecar.orchestrator.maxCandidateTools` | Max tools considered per bind turn (default 12; smaller sets improve 3B accuracy) |
 | `llmSidecar.orchestrator.maxToolCallsPerTurn` | Max parallel tool calls per turn (default 3; each extra call adds one bind round-trip) |
+
+### Unified-memory laptops (Apple Silicon, iGPU)
+
+VS Code, Copilot, and llama-server share one RAM pool. Defaults auto-tune from `os.totalmem()`:
+
+- **≤8GB:** ctx 4096, KV `q4_0`, smaller batches, `--fit on`, no mlock
+- **8–16GB:** ctx 6144, KV `q8_0`, `--fit on`
+- **16–24GB:** ctx 8192, KV `q8_0`
+
+For maximum RAM savings, set `llamaStartMode` to `onDemand` and `llamaIdleTimeoutSec` to `300` (5 min). The proxy signals when bind needs llama; the extension starts it on demand and stops it when idle.
+
+On macOS, Metal uses a wired-memory pool (`iogpu.wired_limit_mb`). If llama-server fails with GPU OOM despite free unified RAM, you may need to raise that limit (advanced; see Apple/llama.cpp docs).
 
 **Note:** upstream reasoning is always buffered before bind. When tools are needed, intermediate prose is hidden from the user; final answers appear after upstream + bind complete (not token-streamed live from the upstream model).
 

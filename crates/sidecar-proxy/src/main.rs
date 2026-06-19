@@ -1,4 +1,5 @@
 mod adapters;
+mod activity;
 mod config;
 mod context;
 mod dlp;
@@ -100,6 +101,7 @@ async fn main() {
         .route("/v1/responses", post(responses))
         .route("/v1/completions", post(completions_pass_through))
         .route("/admin/reload", post(admin_reload))
+        .route("/admin/status", get(admin_status))
         .layer(middleware::from_fn(logging::log_requests))
         .layer(TraceLayer::new_for_http())
         .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_BYTES))
@@ -269,6 +271,20 @@ async fn admin_reload(
     let mut guard = state.inner.write().await;
     *guard = next;
     Json(serde_json::json!({ "reloaded": true })).into_response()
+}
+
+async fn admin_status(
+    State(state): State<SharedState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !admin_authorized(&headers, &state.admin_token) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "unauthorized" })),
+        )
+            .into_response();
+    }
+    Json(activity::snapshot()).into_response()
 }
 
 fn load_initial_payload() -> ProxyConfigPayload {

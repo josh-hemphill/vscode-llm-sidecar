@@ -21,6 +21,7 @@ jobs:
         with:
           workspaces: crates/sidecar-proxy
       - run: cargo test -p sidecar-proxy
+      - run: cargo clippy -p sidecar-proxy --all-targets -- -D warnings
 
   typescript:
     name: TypeScript lint and tests

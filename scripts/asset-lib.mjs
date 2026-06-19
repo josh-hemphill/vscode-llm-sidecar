@@ -15,6 +15,10 @@ import {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
+import {
+  isGgmlSharedLibrary,
+  keepLlamaRuntimeFile,
+} from "./llama-runtime-files.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultManifestPath = join(root, "assets", "runtime-manifest.json");
@@ -28,6 +32,12 @@ export const llamaServerExeName = () =>
 export const isLlamaRuntimeBundleComplete = (destDir) => {
   const exePath = join(destDir, llamaServerExeName());
   if (!existsSync(exePath)) {
+    return false;
+  }
+  const hasGgml = readdirSync(destDir).some(
+    (name) => statSync(join(destDir, name)).isFile() && isGgmlSharedLibrary(name)
+  );
+  if (!hasGgml) {
     return false;
   }
   if (process.platform === "win32") {
@@ -56,7 +66,7 @@ export const resolveLlamaBundleRoot = (extractDir) => {
   return extractDir;
 };
 
-const copyTreeSync = (srcDir, destDir) => {
+const copyFilteredTreeSync = (srcDir, destDir, platform) => {
   mkdirSync(destDir, { recursive: true });
   let copied = 0;
   for (const name of readdirSync(srcDir)) {
@@ -64,10 +74,13 @@ const copyTreeSync = (srcDir, destDir) => {
     const dest = join(destDir, name);
     const st = statSync(src);
     if (st.isDirectory()) {
-      copied += copyTreeSync(src, dest);
+      copied += copyFilteredTreeSync(src, dest, platform);
       continue;
     }
     if (!st.isFile()) {
+      continue;
+    }
+    if (!keepLlamaRuntimeFile(name, platform)) {
       continue;
     }
     copyFileSync(src, dest);
@@ -76,10 +89,10 @@ const copyTreeSync = (srcDir, destDir) => {
   return copied;
 };
 
-/** Copies all files from an extracted llama.cpp archive into the install dir. */
-export const copyLlamaRuntimeBundle = (extractDir, destDir) => {
+/** Copies llama-server and shared libs from an extracted archive into the install dir. */
+export const copyLlamaRuntimeBundle = (extractDir, destDir, platform = platformArchDir()) => {
   const bundleRoot = resolveLlamaBundleRoot(extractDir);
-  return copyTreeSync(bundleRoot, destDir);
+  return copyFilteredTreeSync(bundleRoot, destDir, platform);
 };
 
 /** Reads and parses the runtime assets manifest. */

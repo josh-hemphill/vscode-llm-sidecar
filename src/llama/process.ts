@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from "node:child_process";
+import * as os from "node:os";
 import * as vscode from "vscode";
 import { getSettings } from "../config/store.ts";
 import { resolveLlamaServerBinary } from "./binary.ts";
@@ -10,6 +11,10 @@ import {
   readLlamaOwnerFromDir,
   writeLlamaOwnerToDir,
 } from "./llama-owner-fs.ts";
+import { detectLlamaServerCapabilities } from "./capabilities.ts";
+import { resolveLlamaVariantSetting } from "./detect-backend.ts";
+import { resolveMemoryProfile } from "./memory-profile.ts";
+import { buildLlamaServerArgs } from "./server-args.ts";
 import * as path from "node:path";
 
 export interface LlamaHandle {
@@ -26,6 +31,9 @@ const llamaBaseUrl = (port: number): string => `http://127.0.0.1:${port}`;
 
 export const isLlamaRunning = (): boolean =>
   (child !== undefined && child.exitCode === null) || attachedExternal;
+
+/** True when this window spawned llama-server (eligible for idle stop / restart). */
+export const ownsLlamaProcess = (): boolean => ownsProcess;
 
 export const getLlamaBaseUrl = (): string | undefined =>
   isLlamaRunning() && currentPort > 0 ? llamaBaseUrl(currentPort) : undefined;
@@ -122,25 +130,23 @@ export const startLlamaServer = async (
   currentPort = port;
   attachedExternal = false;
   ownsProcess = true;
-  const args = [
-    "--host",
-    "127.0.0.1",
-    "--port",
-    String(port),
-    "-m",
-    model.path,
-    "--ctx-size",
-    String(settings.orchestrator.ctxSize),
-    "--parallel",
-    "1",
-    "--cont-batching",
-    "--slot-save-path",
-    context.globalStorageUri.fsPath,
-  ];
-  if (settings.orchestrator.gpuLayers !== 0) {
-    args.push("-ngl", String(settings.orchestrator.gpuLayers));
-  }
 
+  const variant = resolveLlamaVariantSetting(settings.orchestrator.llamaServerVariant);
+  const profile = resolveMemoryProfile(os.totalmem(), variant);
+  const caps = detectLlamaServerCapabilities(binary);
+  const launch = buildLlamaServerArgs({
+    settings: settings.orchestrator,
+    profile,
+    caps,
+    modelPath: model.path,
+    port,
+    slotSavePath: context.globalStorageUri.fsPath,
+  });
+  const args = launch.args;
+
+  log.appendLine(
+    `llama launch profile: ctx=${launch.ctxSize} kv=${launch.kvCacheType} fit=${launch.fitEnabled} flash=${launch.flashAttention} ram=${Math.round(os.totalmem() / (1024 ** 3))}GB variant=${variant}`
+  );
   log.appendLine(`Starting llama-server: ${binary} (${model.source})`);
   child = spawn(binary, args, {
     cwd: path.dirname(binary),

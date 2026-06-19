@@ -37,6 +37,7 @@ import {
 } from "./catalog.ts";
 import { buildCatalogFromResolved } from "../models/merge.ts";
 import { refreshModelCacheIfNeeded } from "../models/discover.ts";
+import { resolveLlamaStartMode } from "../llama/lifecycle.ts";
 
 export { getOutputChannel } from "./output-channel.ts";
 
@@ -58,6 +59,9 @@ export const isRunning = (): boolean =>
 
 export const getProxyBaseUrl = (): string | undefined =>
   isRunning() && currentPort > 0 ? proxyBaseUrl(currentPort) : undefined;
+
+/** Returns the admin token for the locally spawned proxy (reload/status). */
+export const getProxyAdminToken = (): string | undefined => adminToken;
 
 const clearLocalProxyState = (): void => {
   child = undefined;
@@ -190,7 +194,13 @@ export const startProxy = async (
     const settings = getSettings();
 
     if (!options?.skipLlama && settings.autoStartLlama) {
-      await startLlamaServer(context, log);
+      const startMode = resolveLlamaStartMode(
+        settings.autoStartLlama,
+        settings.orchestrator.llamaStartMode
+      );
+      if (startMode === "onActivate") {
+        await startLlamaServer(context, log);
+      }
     }
 
     if (isRunning() && currentPort > 0) {
@@ -216,13 +226,17 @@ export const startProxy = async (
     const binary = resolveProxyBinary(settings, context.extensionPath);
     if (!binary) {
       const tried = proxyBinaryCandidates(settings, context.extensionPath);
-      log.appendLine("Proxy binary not found. Tried:");
+      const platform = `${process.platform}-${process.arch}`;
+      log.appendLine(`Proxy binary not found for ${platform}. Tried:`);
       for (const p of tried) {
         log.appendLine(`  ${p}`);
       }
-      void vscode.window.showErrorMessage(
-        "LLM Sidecar: proxy binary not found. Run `pnpm run build:proxy` or set llmSidecar.proxyBinaryPath."
-      );
+      const isDev =
+        context.extensionMode === vscode.ExtensionMode.Development;
+      const message = isDev
+        ? `LLM Sidecar: proxy binary not found for ${platform}. Run \`pnpm run build:proxy\` (or set \`llmSidecar.proxyBinaryPath\`).`
+        : `LLM Sidecar: the bundled sidecar-proxy binary for ${platform} is missing. This platform may be unsupported or the install is incomplete — try reinstalling the extension. Advanced: point \`llmSidecar.proxyBinaryPath\` at a sidecar-proxy build.`;
+      void vscode.window.showErrorMessage(message);
       return undefined;
     }
 

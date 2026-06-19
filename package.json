@@ -4,6 +4,7 @@
   "description": "Bind-and-return tool orchestration for Copilot BYOK: local llama.cpp sidecar synthesizes tool calls so upstream models only reason in prose; Copilot executes tools with Human-in-the-Loop approval.",
   "version": "0.1.0",
   "publisher": "jo-hemphill",
+  "icon": "media/icon.png",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -35,12 +36,6 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
-  "files": [
-    "dist/extension.js",
-    "dist/extension.js.map",
-    "assets/runtime-manifest.json",
-    "bin/**/sidecar-proxy*"
-  ],
   "contributes": {
     "commands": [
       {
@@ -265,7 +260,60 @@
             "ctxSize": {
               "type": "number",
               "default": 8192,
-              "description": "Context window size passed to llama-server for bind requests"
+              "description": "Context window size passed to llama-server for bind requests (0 = auto from RAM tier)"
+            },
+            "kvCacheType": {
+              "type": "string",
+              "enum": ["auto", "f16", "q8_0", "q4_0"],
+              "default": "auto",
+              "description": "KV cache quantization for llama-server (auto picks q4_0/q8_0 on low-RAM laptops)"
+            },
+            "flashAttention": {
+              "type": "string",
+              "enum": ["auto", "on", "off"],
+              "default": "auto",
+              "description": "Flash attention for llama-server (auto enables on Metal/CUDA/Vulkan)"
+            },
+            "fitDeviceMemory": {
+              "type": "string",
+              "enum": ["auto", "on", "off"],
+              "default": "auto",
+              "description": "Let llama-server fit GPU layers and context to device memory (auto on <=16GB RAM)"
+            },
+            "fitTargetMib": {
+              "type": "number",
+              "default": 1536,
+              "minimum": 256,
+              "description": "Headroom (MiB) reserved for the IDE when fit is enabled"
+            },
+            "batchSize": {
+              "type": "number",
+              "default": 0,
+              "minimum": 0,
+              "description": "llama-server batch size (-b); 0 = auto from RAM tier"
+            },
+            "ubatchSize": {
+              "type": "number",
+              "default": 0,
+              "minimum": 0,
+              "description": "llama-server micro-batch size (-ub); 0 = auto from RAM tier"
+            },
+            "mlock": {
+              "type": "boolean",
+              "default": false,
+              "description": "Pin the model in RAM (not recommended on <=8GB unified-memory laptops)"
+            },
+            "llamaStartMode": {
+              "type": "string",
+              "enum": ["onActivate", "onDemand", "manual"],
+              "default": "onActivate",
+              "description": "When to start llama-server: onActivate (default), onDemand (first tool call; saves RAM), or manual"
+            },
+            "llamaIdleTimeoutSec": {
+              "type": "number",
+              "default": 0,
+              "minimum": 0,
+              "description": "Stop owned llama-server after this many idle seconds (0 = disabled; pairs with onDemand)"
             },
             "maxCandidateTools": {
               "type": "number",
@@ -358,7 +406,11 @@
     "fetch:model": "node scripts/fetch-model.mjs",
     "verify:assets": "node scripts/verify-assets.mjs",
     "package:offline": "node scripts/package-offline-bundle.mjs",
-    "create-vsix": "pnpm dlx @vscode/vsce package --no-dependencies"
+    "create-vsix": "node scripts/create-vsix.mjs",
+    "bump:patch": "node scripts/bump-version.mjs patch",
+    "bump:minor": "node scripts/bump-version.mjs minor",
+    "bump:major": "node scripts/bump-version.mjs major",
+    "bump:version": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

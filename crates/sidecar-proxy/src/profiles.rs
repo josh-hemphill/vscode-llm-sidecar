@@ -130,6 +130,17 @@ pub fn builtin_profiles() -> HashMap<String, NamedProfile> {
     map
 }
 
+pub fn merge_profiles(
+    builtin: HashMap<String, NamedProfile>,
+    user: HashMap<String, NamedProfile>,
+) -> HashMap<String, NamedProfile> {
+    let mut out = builtin;
+    for (k, v) in user {
+        out.insert(k, v);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,15 +155,4 @@ mod tests {
         assert_eq!(profile.additional_system_prompts.len(), 2);
         assert_eq!(profile.additional_system_prompts[0], "Line one");
     }
-}
-
-pub fn merge_profiles(
-    builtin: HashMap<String, NamedProfile>,
-    user: HashMap<String, NamedProfile>,
-) -> HashMap<String, NamedProfile> {
-    let mut out = builtin;
-    for (k, v) in user {
-        out.insert(k, v);
-    }
-    out
 }

@@ -1,0 +1,39 @@
+# When this file exists, vsce uses it instead of falling back to .gitignore
+# (.gitignore excludes bin/ and dist/, which must ship in the VSIX).
+#
+# Everything is included by default; the entries below are excluded.
+# Keep: dist/extension.js, bin/**, assets/**, media/**, package.json, README, LICENSE, CHANGELOG.
+
+.github/**
+.vscode/**
+.vscode-test/**
+
+# Source and build inputs (the compiled output in dist/ is what ships)
+src/**
+crates/**
+target/**
+scripts/**
+docs/**
+
+# Local-only asset/build caches
+.assets/**
+artifacts/**
+
+# Dev dependencies are not bundled (packaged with --no-dependencies)
+node_modules/**
+
+# Tests, sourcemaps, and tooling configs
+**/*.test.ts
+**/*.test.mjs
+**/*.map
+**/tsconfig*.json
+**/*.rs
+Cargo.toml
+Cargo.lock
+pnpm-lock.yaml
+pnpm-workspace.yaml
+.npmrc
+.editorconfig
+.gitignore
+.gitattributes
+*.vsix

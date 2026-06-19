@@ -38,7 +38,10 @@ impl OrchestratedToolsAdapter {
             ctx.client.clone(),
             ctx.orchestrator.local_only,
         );
-        if !llama.health().await {
+        crate::activity::record_llama_use();
+        let healthy = wait_for_llama_health(&llama, 25_000).await;
+        crate::activity::mark_llama_up(healthy);
+        if !healthy {
             return Err(AdapterError::Other(
                 "llama-server is not running. In VS Code run “LLM Sidecar: Download Llama Server”, ensure llmSidecar.autoStartLlama is true, then reload the window."
                     .into(),
@@ -117,6 +120,22 @@ struct BindOutcome {
     tool_names: Vec<String>,
 }
 
+/// Polls llama-server health, signaling wanted until healthy or timeout.
+async fn wait_for_llama_health(llama: &LlamaClient, timeout_ms: u64) -> bool {
+    if llama.health().await {
+        return true;
+    }
+    crate::activity::record_llama_wanted();
+    let started = std::time::Instant::now();
+    while started.elapsed().as_millis() < timeout_ms as u128 {
+        if llama.health().await {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    llama.health().await
+}
+
 async fn run_bind_pipeline(
     ctx: &AdapterContext,
     tools: &[Value],
@@ -155,14 +174,14 @@ async fn run_bind_pipeline(
     let has_prior_results = count_prior_tool_results(prior_messages) > 0;
     let wants_exec = wants_command_execution(reason_text, user_query);
     let wants_modify = wants_file_modification(reason_text, user_query);
+    let allow_mutating = wants_modify || has_prior_results;
 
     let mut candidates = select_candidate_tools(reason_text, user_query, tools, max_candidates);
     if !wants_exec {
         candidates.retain(|t| !is_guarded_tool(tool_name_of(t)));
     }
-    if !wants_modify {
-        // Read-only request: never offer file-mutating tools, so the model
-        // cannot propose edits before any context has been gathered.
+    if !allow_mutating {
+        // Read-only request with no prior gather round: never offer file-mutating tools.
         candidates.retain(|t| !is_mutating_tool(tool_name_of(t)));
     }
     if candidates.is_empty() {
@@ -175,6 +194,7 @@ async fn run_bind_pipeline(
         &plan_excerpt,
         &query_excerpt,
         &context_excerpt,
+        prior_messages,
         max_calls,
         has_prior_results,
     )
@@ -193,6 +213,7 @@ async fn run_bind_pipeline(
             &plan_excerpt,
             &query_excerpt,
             &context_excerpt,
+            prior_messages,
         )
         .await?
         {
@@ -232,6 +253,7 @@ async fn select_actions_via_llama(
     plan_excerpt: &str,
     query_excerpt: &str,
     context_excerpt: &str,
+    prior_messages: &[ChatMessage],
     max_calls: usize,
     prefer_final: bool,
 ) -> Result<Vec<String>, AdapterError> {
@@ -250,8 +272,10 @@ async fn select_actions_via_llama(
     } else {
         format!("\n\nWorkspace context already gathered:\n{context_excerpt}")
     };
+    let tool_results_block =
+        format_tool_results_section(prior_messages, MAX_BIND_TOOL_RESULTS_CHARS, None);
     let stage_one_user = format!(
-        "User request:\n{query_excerpt}\n\nAssistant plan:\n{plan_excerpt}{context_block}\n\nAvailable tools:\n{}",
+        "User request:\n{query_excerpt}\n\nAssistant plan:\n{plan_excerpt}{context_block}{tool_results_block}\n\nAvailable tools:\n{}",
         compact_tool_summaries(candidates)
     );
     let stage_one = llama
@@ -275,6 +299,7 @@ async fn select_actions_via_llama(
     Ok(names)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn bind_single_tool_call(
     llama: &mut LlamaClient,
     ctx: &AdapterContext,
@@ -283,6 +308,7 @@ async fn bind_single_tool_call(
     plan_excerpt: &str,
     query_excerpt: &str,
     context_excerpt: &str,
+    prior_messages: &[ChatMessage],
 ) -> Result<Option<ToolCall>, AdapterError> {
     let Some(selected_tool) = tools.iter().find(|t| {
         t.get("function")
@@ -298,13 +324,14 @@ async fn bind_single_tool_call(
         json_schema: arg_schema.clone(),
         gbnf: json_schema_to_gbnf(&arg_schema),
     };
-    let context_block = if context_excerpt.trim().is_empty() {
-        String::new()
-    } else {
-        format!("\n\nWorkspace context:\n{context_excerpt}")
-    };
-    let stage_two_user = format!(
-        "User request:\n{query_excerpt}\n\nAssistant plan:\n{plan_excerpt}{context_block}\n\nFill the arguments for the tool `{selected_name}` as JSON with fields name and arguments. Use concrete values taken from the plan, the user request, and the workspace context (for example real file paths and real search terms). Never use placeholder names like pattern_to_search_for or example values."
+    let params_block = describe_tool_parameters(selected_tool);
+    let stage_two_user = build_stage_two_user_prompt(
+        query_excerpt,
+        plan_excerpt,
+        context_excerpt,
+        selected_name,
+        &params_block,
+        prior_messages,
     );
     let stage_two = llama
         .bind_completion(
@@ -545,7 +572,12 @@ fn tool_call_args_are_concrete(tool: &Value, arguments: &str) -> bool {
     let Some(obj) = args_val.as_object() else {
         return false;
     };
-    let params = tool.get("function").and_then(|f| f.get("parameters"));
+    let function = tool.get("function");
+    let tool_name = function
+        .and_then(|f| f.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("");
+    let params = function.and_then(|f| f.get("parameters"));
     let required: Vec<String> = params
         .and_then(|p| p.get("required"))
         .and_then(|r| r.as_array())
@@ -563,10 +595,15 @@ fn tool_call_args_are_concrete(tool: &Value, arguments: &str) -> bool {
             _ => {}
         }
     }
-    // Any provided string value that looks like a placeholder marks a blind call.
+    // Any provided string value that looks like a placeholder, or that just
+    // echoes the tool's own name (e.g. command="run_in_terminal"), marks a
+    // blind/hallucinated call.
     for (key, value) in obj {
         if let Value::String(s) = value {
             if looks_like_placeholder(s, key) {
+                return false;
+            }
+            if !tool_name.is_empty() && s.trim() == tool_name {
                 return false;
             }
         }
@@ -578,6 +615,8 @@ fn tool_call_args_are_concrete(tool: &Value, arguments: &str) -> bool {
 const MAX_BIND_PLAN_CHARS: usize = 4_000;
 const MAX_BIND_QUERY_CHARS: usize = 2_000;
 const MAX_BIND_CONTEXT_CHARS: usize = 3_000;
+const MAX_BIND_TOOL_RESULTS_CHARS: usize = 1_500;
+const MAX_BIND_TOOL_RESULTS_ARGS_CHARS: usize = 6_000;
 const MAX_TOOL_DESC_CHARS: usize = 160;
 /// Safety cap on agentic tool rounds before forcing a final answer.
 const MAX_PRIOR_TOOL_ROUNDS: usize = 12;
@@ -616,6 +655,218 @@ fn compact_tool_summaries(tools: &[Value]) -> String {
         }
     }
     lines.join("\n")
+}
+
+/// Renders a tool's parameters as `- name (type, required): description` lines for the bind prompt.
+fn describe_tool_parameters(tool: &Value) -> String {
+    let Some(params) = tool.get("function").and_then(|f| f.get("parameters")) else {
+        return "(no parameters)".into();
+    };
+    let Some(props) = params.get("properties").and_then(|p| p.as_object()) else {
+        return "(no parameters)".into();
+    };
+    if props.is_empty() {
+        return "(no parameters)".into();
+    }
+    let required: std::collections::HashSet<&str> = params
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let mut lines = Vec::with_capacity(props.len());
+    for (name, schema) in props {
+        let ty = schema
+            .get("type")
+            .and_then(|t| t.as_str())
+            .unwrap_or("any");
+        let req = if required.contains(name.as_str()) {
+            "required"
+        } else {
+            "optional"
+        };
+        let desc = schema
+            .get("description")
+            .and_then(|d| d.as_str())
+            .unwrap_or("");
+        if desc.is_empty() {
+            lines.push(format!("- {name} ({ty}, {req})"));
+        } else {
+            lines.push(format!(
+                "- {name} ({ty}, {req}): {}",
+                truncate_chars(desc, MAX_TOOL_DESC_CHARS)
+            ));
+        }
+    }
+    lines.join("\n")
+}
+
+/// Builds the stage-two bind user prompt including workspace context and prior tool results.
+fn build_stage_two_user_prompt(
+    query_excerpt: &str,
+    plan_excerpt: &str,
+    context_excerpt: &str,
+    selected_name: &str,
+    params_block: &str,
+    prior_messages: &[ChatMessage],
+) -> String {
+    let context_block = if context_excerpt.trim().is_empty() {
+        String::new()
+    } else {
+        format!("\n\nWorkspace context:\n{context_excerpt}")
+    };
+    let prefer_path = infer_prefer_path(plan_excerpt, query_excerpt, context_excerpt);
+    let tool_results_block = format_tool_results_section(
+        prior_messages,
+        MAX_BIND_TOOL_RESULTS_ARGS_CHARS,
+        prefer_path.as_deref(),
+    );
+    format!(
+        "User request:\n{query_excerpt}\n\nAssistant plan:\n{plan_excerpt}{context_block}{tool_results_block}\n\nTool `{selected_name}` parameters:\n{params_block}\n\nFill the arguments for the tool `{selected_name}` as JSON with fields name and arguments. Set each argument to a concrete value taken from the plan, the user request, the workspace context, and recent tool results (for example real file paths, exact file content for edits, and real search terms). Never echo a parameter's name or the tool name as its value, and never use placeholders like pattern_to_search_for or example values."
+    )
+}
+
+/// Returns a prompt section for recent tool results, or empty when none fit the budget.
+fn format_tool_results_section(
+    messages: &[ChatMessage],
+    max_chars: usize,
+    prefer_path: Option<&str>,
+) -> String {
+    let formatted = format_prior_tool_results(messages, max_chars, prefer_path);
+    if formatted.is_empty() {
+        String::new()
+    } else {
+        format!("\n\nRecent tool results:\n{formatted}")
+    }
+}
+
+struct PriorToolResultEntry {
+    name: String,
+    content: String,
+    matches_path: bool,
+    recency: usize,
+}
+
+/// Formats prior tool-result messages as compact bullets, most-recent-first.
+fn format_prior_tool_results(
+    messages: &[ChatMessage],
+    max_chars: usize,
+    prefer_path: Option<&str>,
+) -> String {
+    let mut entries = Vec::new();
+    for (idx, msg) in messages.iter().enumerate() {
+        if msg.role != "tool" {
+            continue;
+        }
+        let name = resolve_tool_result_name(msg, messages);
+        let content = message_content_to_string(msg);
+        let matches_path = prefer_path
+            .map(|path| tool_result_matches_path(msg, messages, path, &content))
+            .unwrap_or(false);
+        entries.push(PriorToolResultEntry {
+            name,
+            content,
+            matches_path,
+            recency: idx,
+        });
+    }
+    entries.sort_by(|a, b| {
+        b.matches_path
+            .cmp(&a.matches_path)
+            .then(b.recency.cmp(&a.recency))
+    });
+
+    let mut lines = Vec::new();
+    let mut used = 0usize;
+    for entry in entries {
+        let line = format!("- {}: {}", entry.name, entry.content);
+        let line_len = line.chars().count();
+        if used + line_len > max_chars {
+            if lines.is_empty() {
+                lines.push(truncate_chars(&line, max_chars));
+                break;
+            }
+            break;
+        }
+        used += line_len;
+        lines.push(line);
+    }
+    lines.join("\n")
+}
+
+/// Resolves the tool name for a tool-result message.
+fn resolve_tool_result_name(msg: &ChatMessage, messages: &[ChatMessage]) -> String {
+    if let Some(name) = &msg.name {
+        if !name.is_empty() {
+            return name.clone();
+        }
+    }
+    if let Some(id) = &msg.tool_call_id {
+        for prior in messages {
+            if let Some(calls) = &prior.tool_calls {
+                for call in calls {
+                    if call.id == *id {
+                        return call.function.name.clone();
+                    }
+                }
+            }
+        }
+    }
+    "tool".into()
+}
+
+/// True when a tool result corresponds to the preferred path (content or prior call args).
+fn tool_result_matches_path(
+    msg: &ChatMessage,
+    messages: &[ChatMessage],
+    prefer_path: &str,
+    content: &str,
+) -> bool {
+    let normalized = prefer_path.replace('\\', "/");
+    if content.replace('\\', "/").contains(&normalized) {
+        return true;
+    }
+    let Some(id) = &msg.tool_call_id else {
+        return false;
+    };
+    for prior in messages {
+        let Some(calls) = &prior.tool_calls else {
+            continue;
+        };
+        for call in calls {
+            if call.id != *id {
+                continue;
+            }
+            if let Ok(args) = serde_json::from_str::<Value>(&call.function.arguments) {
+                for key in PATH_ARG_KEYS {
+                    if let Some(Value::String(path)) = args.get(*key) {
+                        if paths_match(path, prefer_path) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn paths_match(left: &str, right: &str) -> bool {
+    left.replace('\\', "/") == right.replace('\\', "/")
+}
+
+/// Infers a workspace-relative path from plan, query, and context text for stage-two biasing.
+fn infer_prefer_path(plan: &str, query: &str, context: &str) -> Option<String> {
+    let corpus = format!("{plan}\n{query}\n{context}");
+    for token in corpus.split_whitespace() {
+        let cleaned = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '.' && c != '_' && c != '-');
+        if cleaned.is_empty() {
+            continue;
+        }
+        if cleaned.contains('.') && is_workspace_relative(cleaned) {
+            return Some(cleaned.to_string());
+        }
+    }
+    None
 }
 
 fn build_reason_messages(
@@ -1039,6 +1290,60 @@ mod tests {
     }
 
     #[test]
+    fn rejects_arguments_that_echo_tool_name() {
+        let tool = json!({
+            "type": "function",
+            "function": {
+                "name": "run_in_terminal",
+                "parameters": {
+                    "type": "object",
+                    "required": ["command"],
+                    "properties": { "command": { "type": "string" } }
+                }
+            }
+        });
+        // The bind model echoing the tool name as the command is a blind call.
+        assert!(!tool_call_args_are_concrete(
+            &tool,
+            r#"{"command":"run_in_terminal"}"#
+        ));
+        assert!(tool_call_args_are_concrete(
+            &tool,
+            r#"{"command":"cargo build --release"}"#
+        ));
+    }
+
+    #[test]
+    fn describe_tool_parameters_lists_fields_with_descriptions() {
+        let tool = json!({
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "parameters": {
+                    "type": "object",
+                    "required": ["path"],
+                    "properties": {
+                        "path": { "type": "string", "description": "File to read" },
+                        "limit": { "type": "number" }
+                    }
+                }
+            }
+        });
+        let described = describe_tool_parameters(&tool);
+        assert!(described.contains("- path (string, required): File to read"));
+        assert!(described.contains("- limit (number, optional)"));
+    }
+
+    #[test]
+    fn describe_tool_parameters_handles_no_params() {
+        let tool = json!({
+            "type": "function",
+            "function": { "name": "noop", "parameters": { "type": "object", "properties": {} } }
+        });
+        assert_eq!(describe_tool_parameters(&tool), "(no parameters)");
+    }
+
+    #[test]
     fn guards_execution_tools_unless_requested() {
         assert!(is_guarded_tool("run_in_terminal"));
         assert!(!is_guarded_tool("readFile"));
@@ -1178,5 +1483,120 @@ mod tests {
         assert_eq!(cut.chars().count(), MAX_TOOL_DESC_CHARS + 1);
         assert!(cut.ends_with('…'));
         assert_eq!(truncate_chars("short", MAX_TOOL_DESC_CHARS), "short");
+    }
+
+    #[test]
+    fn format_prior_tool_results_labels_and_orders_most_recent_first() {
+        let messages = vec![
+            ChatMessage {
+                role: "tool".into(),
+                content: Some(MessageContent::Text("old content".into())),
+                tool_calls: None,
+                tool_call_id: Some("1".into()),
+                name: Some("readFile".into()),
+            },
+            ChatMessage {
+                role: "tool".into(),
+                content: Some(MessageContent::Text("new content".into())),
+                tool_calls: None,
+                tool_call_id: Some("2".into()),
+                name: Some("grep_search".into()),
+            },
+        ];
+        let formatted = format_prior_tool_results(&messages, 10_000, None);
+        let grep_pos = formatted.find("grep_search").unwrap();
+        let read_pos = formatted.find("readFile").unwrap();
+        assert!(grep_pos < read_pos);
+        assert!(formatted.contains("- grep_search: new content"));
+        assert!(formatted.contains("- readFile: old content"));
+    }
+
+    #[test]
+    fn format_prior_tool_results_truncates_to_budget() {
+        let messages = vec![ChatMessage {
+            role: "tool".into(),
+            content: Some(MessageContent::Text("x".repeat(500))),
+            tool_calls: None,
+            tool_call_id: None,
+            name: Some("readFile".into()),
+        }];
+        let formatted = format_prior_tool_results(&messages, 40, None);
+        assert!(formatted.chars().count() <= 41);
+    }
+
+    #[test]
+    fn prefer_path_prioritizes_matching_tool_result_under_tight_budget() {
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".into(),
+                content: None,
+                tool_calls: Some(vec![ToolCall {
+                    id: "1".into(),
+                    call_type: Some("function".into()),
+                    function: ToolCallFunction {
+                        name: "readFile".into(),
+                        arguments: r#"{"path":"src/target.ts"}"#.into(),
+                    },
+                }]),
+                tool_call_id: None,
+                name: None,
+            },
+            ChatMessage {
+                role: "tool".into(),
+                content: Some(MessageContent::Text("target file body".into())),
+                tool_calls: None,
+                tool_call_id: Some("1".into()),
+                name: Some("readFile".into()),
+            },
+            ChatMessage {
+                role: "tool".into(),
+                content: Some(MessageContent::Text("unrelated huge ".repeat(20))),
+                tool_calls: None,
+                tool_call_id: None,
+                name: Some("listDir".into()),
+            },
+        ];
+        let formatted =
+            format_prior_tool_results(&messages, 80, Some("src/target.ts"));
+        assert!(formatted.contains("target file body"));
+        assert!(!formatted.contains("unrelated huge"));
+    }
+
+    #[test]
+    fn prior_results_unlock_mutating_tools_without_explicit_modify_terms() {
+        let messages = vec![ChatMessage {
+            role: "tool".into(),
+            content: Some(MessageContent::Text("file contents".into())),
+            tool_calls: None,
+            tool_call_id: Some("1".into()),
+            name: Some("readFile".into()),
+        }];
+        let has_prior = count_prior_tool_results(&messages) > 0;
+        let wants_modify = wants_file_modification("I'll inspect the file", "go ahead");
+        assert!(!wants_modify);
+        assert!(has_prior);
+        assert!(wants_modify || has_prior);
+    }
+
+    #[test]
+    fn build_stage_two_user_prompt_includes_tool_results_block() {
+        let messages = vec![ChatMessage {
+            role: "tool".into(),
+            content: Some(MessageContent::Text("export const x = 1;".into())),
+            tool_calls: None,
+            tool_call_id: None,
+            name: Some("readFile".into()),
+        }];
+        let prompt = build_stage_two_user_prompt(
+            "go ahead",
+            "edit src/main.ts",
+            "",
+            "replaceString",
+            "- path (string, required)",
+            &messages,
+        );
+        assert!(prompt.contains("Recent tool results:"));
+        assert!(prompt.contains("readFile"));
+        assert!(prompt.contains("export const x = 1;"));
     }
 }

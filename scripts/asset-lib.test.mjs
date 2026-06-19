@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {
@@ -95,7 +95,7 @@ test("resolveLlamaBundleRoot unwraps single top-level directory", () => {
   rmSync(extractDir, { recursive: true, force: true });
 });
 
-test("copyLlamaRuntimeBundle flattens wrapped tar layout", () => {
+test("copyLlamaRuntimeBundle keeps server and libs, drops extra executables", () => {
   const extractDir = join(process.cwd(), ".tmp-llama-bundle-extract");
   const installDir = join(process.cwd(), ".tmp-llama-bundle-install");
   const wrapperDir = join(extractDir, "llama-b9283");
@@ -103,9 +103,15 @@ test("copyLlamaRuntimeBundle flattens wrapped tar layout", () => {
   rmSync(installDir, { recursive: true, force: true });
   mkdirSync(wrapperDir, { recursive: true });
   writeFileSync(join(wrapperDir, "llama-server"), "exe");
+  writeFileSync(join(wrapperDir, "llama-cli"), "cli");
+  writeFileSync(join(wrapperDir, "libggml.so"), "ggml");
   writeFileSync(join(wrapperDir, "libllama-server-impl.dylib"), "impl");
-  const copied = copyLlamaRuntimeBundle(extractDir, installDir);
-  assert.equal(copied, 2);
+  const copied = copyLlamaRuntimeBundle(extractDir, installDir, "darwin-x64");
+  assert.equal(copied, 3);
+  const installed = readdirSync(installDir).sort();
+  assert.ok(installed.includes("llama-server"));
+  assert.ok(installed.includes("libggml.so"));
+  assert.ok(!installed.includes("llama-cli"));
   assert.ok(existsSync(join(installDir, "llama-server")));
   rmSync(extractDir, { recursive: true, force: true });
   rmSync(installDir, { recursive: true, force: true });

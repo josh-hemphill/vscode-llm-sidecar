@@ -458,8 +458,10 @@ mod tests {
 
     #[test]
     fn transform_request_inserts_additional_system_prompts_after_preamble() {
-        let mut named = NamedProfile::default();
-        named.additional_system_prompts = vec!["Prefer tools for actions.".into()];
+        let named = NamedProfile {
+            additional_system_prompts: vec!["Prefer tools for actions.".into()],
+            ..Default::default()
+        };
         let req = ChatCompletionRequest {
             model: "test".into(),
             messages: vec![ChatMessage {
@@ -492,8 +494,10 @@ mod tests {
 
     #[test]
     fn transform_request_inserts_extras_without_tools_preamble() {
-        let mut named = NamedProfile::default();
-        named.additional_system_prompts = vec!["Endpoint tuning.".into()];
+        let named = NamedProfile {
+            additional_system_prompts: vec!["Endpoint tuning.".into()],
+            ..Default::default()
+        };
         let req = ChatCompletionRequest {
             model: "test".into(),
             messages: vec![ChatMessage {

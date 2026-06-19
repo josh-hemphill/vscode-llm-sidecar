@@ -13,6 +13,7 @@ import {
   buildModelCatalog,
   awaitBootstrap,
   getOutputChannel,
+  getProxyAdminToken,
   getProxyBaseUrl,
   reloadProxyConfig,
   startProxy,
@@ -23,6 +24,17 @@ import { disposeOutputChannel } from "./proxy/output-channel.ts";
 import { isCopilotByokSecretLikelyMissing } from "./secrets/byok.ts";
 import { runSyncTargets } from "./sync/registry.ts";
 import { refreshSidecarStatusBar } from "./status/refresh.ts";
+import {
+  resolveLlamaStartMode,
+  startLlamaLifecycleManager,
+  stopLlamaLifecycleManager,
+} from "./llama/lifecycle.ts";
+import { affectsLlamaLaunch } from "./llama/server-args.ts";
+import {
+  isLlamaRunning,
+  ownsLlamaProcess,
+  stopLlamaServer,
+} from "./llama/process.ts";
 
 let statusBarItem: vscode.StatusBarItem | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
@@ -119,7 +131,13 @@ const bootstrapSidecar = async (
   try {
     await refreshModelCacheIfNeeded(context, log, { secretRetries: 5 });
     await startProxy(context, log, { skipLlama: true });
-    if (settings.autoStartLlama) {
+    startLlamaLifecycleManager(context, log, getProxyAdminToken);
+
+    const startMode = resolveLlamaStartMode(
+      settings.autoStartLlama,
+      settings.orchestrator.llamaStartMode
+    );
+    if (startMode === "onActivate") {
       await startLlamaServer(context, log);
       if (getProxyBaseUrl()) {
         await reloadProxyConfig(context, log);
@@ -195,6 +213,10 @@ export const activate = async (
         return;
       }
       try {
+        if (affectsLlamaLaunch(e) && ownsLlamaProcess() && isLlamaRunning()) {
+          await stopLlamaServer(context);
+          await startLlamaServer(context, log);
+        }
         if (getProxyBaseUrl()) {
           await reloadProxyConfig(context, log);
           const base = getProxyBaseUrl();
@@ -218,6 +240,7 @@ export const activate = async (
 };
 
 export const deactivate = async (): Promise<void> => {
+  stopLlamaLifecycleManager();
   await awaitBootstrap();
   disposeOutputChannel();
   if (extensionContext) {

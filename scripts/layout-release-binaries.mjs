@@ -1,12 +1,30 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { keepLlamaRuntimeFile } from "./llama-runtime-files.mjs";
 
-/** Copies downloaded CI artifacts into bin/<platform>-<arch>/ for vsce package. */
+/** Copies downloaded CI artifacts into bin/<platform>/ for vsce package. */
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const artifactsDir = process.argv[2] ?? join(root, "artifacts");
+const args = process.argv.slice(2);
+const getFlag = (name) => {
+  const idx = args.indexOf(name);
+  return idx >= 0 ? args[idx + 1] : undefined;
+};
+
+const artifactsDir = args.find((a) => !a.startsWith("--")) ?? join(root, "artifacts");
+const platform = getFlag("--platform");
+
+if (!platform) {
+  console.error("layout-release-binaries: --platform is required (e.g. linux-x64)");
+  process.exit(1);
+}
+
+const shouldKeep = (name) =>
+  name.startsWith("sidecar-proxy") || keepLlamaRuntimeFile(name, platform);
 
 let copied = 0;
+const destDir = join(root, "bin", platform);
+mkdirSync(destDir, { recursive: true });
 
 const walk = (dir) => {
   for (const name of readdirSync(dir)) {
@@ -15,18 +33,9 @@ const walk = (dir) => {
       walk(full);
       continue;
     }
-    if (!name.startsWith("sidecar-proxy") && !name.startsWith("llama-server")) {
+    if (!shouldKeep(name)) {
       continue;
     }
-    const platformArch = dirname(full).split(/[/\\]/).pop();
-    if (!platformArch?.includes("-")) {
-      console.warn(
-        `layout-release-binaries: skip ${full} (expected parent like linux-x64)`
-      );
-      continue;
-    }
-    const destDir = join(root, "bin", platformArch);
-    mkdirSync(destDir, { recursive: true });
     const dest = join(destDir, name);
     cpSync(full, dest);
     copied += 1;
@@ -42,7 +51,7 @@ if (existsSync(artifactsDir)) {
 
 if (copied === 0) {
   console.error(
-    "layout-release-binaries: no sidecar or llama binaries found"
+    `layout-release-binaries: no sidecar or llama binaries found for ${platform}`
   );
   process.exit(1);
 }

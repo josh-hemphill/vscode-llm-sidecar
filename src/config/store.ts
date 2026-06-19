@@ -116,8 +116,25 @@ export const buildProxyPayload = async (
     recentFiles: [],
     diagnostics: [],
   };
-  const { llamaServerBinaryPath: _b, modelPath: _p, modelMirrorUrl: _m, modelReleaseAsset: _r, gpuLayers: _g, ctxSize: _c, llamaPort, ...orchestratorForProxy } =
-    settings.orchestrator;
+  const {
+    llamaServerBinaryPath: _b,
+    modelPath: _p,
+    modelMirrorUrl: _m,
+    modelReleaseAsset: _r,
+    gpuLayers: _g,
+    ctxSize: _c,
+    kvCacheType: _kv,
+    flashAttention: _fa,
+    fitDeviceMemory: _fit,
+    fitTargetMib: _fitTarget,
+    batchSize: _batch,
+    ubatchSize: _ubatch,
+    mlock: _mlock,
+    llamaStartMode: _startMode,
+    llamaIdleTimeoutSec: _idle,
+    llamaPort,
+    ...orchestratorForProxy
+  } = settings.orchestrator;
   return {
     profiles,
     endpoints,

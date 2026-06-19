@@ -1,15 +1,37 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import {
+  isGgmlSharedLibrary,
+  keepLlamaRuntimeFile,
+} from "../../scripts/llama-runtime-files.mjs";
 
 /** Returns the platform-specific llama-server executable filename. */
 export const llamaServerBinaryName = (): string =>
   process.platform === "win32" ? "llama-server.exe" : "llama-server";
 
+const platformArchDir = (): string => `${process.platform}-${process.arch}`;
+
+const hasGgmlSharedLibrary = (installDir: string): boolean => {
+  for (const name of readdirSync(installDir)) {
+    const full = path.join(installDir, name);
+    if (!statSync(full).isFile()) {
+      continue;
+    }
+    if (isGgmlSharedLibrary(name)) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /** Returns true when the installed llama-server bundle can run. */
 export const isLlamaRuntimeBundleComplete = (installDir: string): boolean => {
   const exePath = path.join(installDir, llamaServerBinaryName());
   if (!existsSync(exePath)) {
+    return false;
+  }
+  if (!hasGgmlSharedLibrary(installDir)) {
     return false;
   }
   if (process.platform === "win32") {
@@ -38,7 +60,11 @@ export const resolveLlamaBundleRoot = (extractDir: string): string => {
   return extractDir;
 };
 
-const copyTree = async (srcDir: string, destDir: string): Promise<number> => {
+const copyFilteredTree = async (
+  srcDir: string,
+  destDir: string,
+  platform: string
+): Promise<number> => {
   let copied = 0;
   const entries = await fs.readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
@@ -46,10 +72,13 @@ const copyTree = async (srcDir: string, destDir: string): Promise<number> => {
     const dest = path.join(destDir, entry.name);
     if (entry.isDirectory()) {
       await fs.mkdir(dest, { recursive: true });
-      copied += await copyTree(src, dest);
+      copied += await copyFilteredTree(src, dest, platform);
       continue;
     }
     if (!entry.isFile()) {
+      continue;
+    }
+    if (!keepLlamaRuntimeFile(entry.name, platform)) {
       continue;
     }
     await fs.copyFile(src, dest);
@@ -58,14 +87,15 @@ const copyTree = async (srcDir: string, destDir: string): Promise<number> => {
   return copied;
 };
 
-/** Copies all files from an extracted llama.cpp archive into the install dir. */
+/** Copies llama-server and shared libs from an extracted archive into the install dir. */
 export const copyLlamaRuntimeBundle = async (
   extractDir: string,
-  installDir: string
+  installDir: string,
+  platform = platformArchDir()
 ): Promise<number> => {
   const bundleRoot = resolveLlamaBundleRoot(extractDir);
   await fs.mkdir(installDir, { recursive: true });
-  return copyTree(bundleRoot, installDir);
+  return copyFilteredTree(bundleRoot, installDir, platform);
 };
 
 export const windowsDllMissingExitCode = 3221225781;

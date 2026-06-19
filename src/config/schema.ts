@@ -111,6 +111,14 @@ export type LlamaServerVariant =
   | "vulkan"
   | "metal";
 
+export type KvCacheType = "auto" | "f16" | "q8_0" | "q4_0";
+
+export type FlashAttentionMode = "auto" | "on" | "off";
+
+export type FitDeviceMemoryMode = "auto" | "on" | "off";
+
+export type LlamaStartMode = "onActivate" | "onDemand" | "manual";
+
 export interface DiagnosticHint {
   file: string;
   line: number;
@@ -145,7 +153,21 @@ export interface OrchestratorConfig {
   modelMirrorSha256: string;
   modelReleaseAsset: string;
   gpuLayers: number;
+  /** Context window for bind; 0 = auto from RAM tier. */
   ctxSize: number;
+  kvCacheType: KvCacheType;
+  flashAttention: FlashAttentionMode;
+  fitDeviceMemory: FitDeviceMemoryMode;
+  /** Headroom (MiB) reserved for the IDE when fit is enabled. */
+  fitTargetMib: number;
+  /** Batch size; 0 = auto from RAM tier. */
+  batchSize: number;
+  /** Micro-batch size; 0 = auto from RAM tier. */
+  ubatchSize: number;
+  mlock: boolean;
+  llamaStartMode: LlamaStartMode;
+  /** Stop owned llama-server after this many idle seconds; 0 = disabled. */
+  llamaIdleTimeoutSec: number;
   /** Max tools considered during bind stage-one selection. */
   maxCandidateTools: number;
   /** Max tool calls emitted per assistant turn. */
@@ -173,7 +195,24 @@ export interface LlmSidecarSettings {
 export interface ProxyConfigPayload {
   profiles: Record<string, NamedProfile>;
   endpoints: Array<EndpointConfig & { apiKey?: string }>;
-  orchestrator: Omit<OrchestratorConfig, "llamaServerBinaryPath" | "modelPath" | "modelMirrorUrl" | "modelReleaseAsset" | "gpuLayers" | "ctxSize"> & {
+  orchestrator: Omit<
+    OrchestratorConfig,
+    | "llamaServerBinaryPath"
+    | "modelPath"
+    | "modelMirrorUrl"
+    | "modelReleaseAsset"
+    | "gpuLayers"
+    | "ctxSize"
+    | "kvCacheType"
+    | "flashAttention"
+    | "fitDeviceMemory"
+    | "fitTargetMib"
+    | "batchSize"
+    | "ubatchSize"
+    | "mlock"
+    | "llamaStartMode"
+    | "llamaIdleTimeoutSec"
+  > & {
     workspace: WorkspaceContextPayload;
   };
 }
@@ -369,6 +408,15 @@ export const DEFAULT_ORCHESTRATOR: OrchestratorConfig = {
   modelReleaseAsset: defaultCatalogEntry.sources[0]?.url ?? "",
   gpuLayers: -1,
   ctxSize: defaultCatalogEntry.ctxSizeRecommended,
+  kvCacheType: "auto",
+  flashAttention: "auto",
+  fitDeviceMemory: "auto",
+  fitTargetMib: 1536,
+  batchSize: 0,
+  ubatchSize: 0,
+  mlock: false,
+  llamaStartMode: "onActivate",
+  llamaIdleTimeoutSec: 0,
   maxCandidateTools: 12,
   maxToolCallsPerTurn: 3,
 };

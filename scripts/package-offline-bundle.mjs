@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
@@ -7,8 +7,8 @@ import {
   getModelEntry,
   loadManifest,
   platformArchDir,
-  llamaServerExeName,
 } from "./asset-lib.mjs";
+import { keepLlamaRuntimeFile } from "./llama-runtime-files.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -33,13 +33,22 @@ mkdirSync(binDest, { recursive: true });
 const proxyName =
   process.platform === "win32" ? "sidecar-proxy.exe" : "sidecar-proxy";
 const proxySrc = join(root, "bin", platform, proxyName);
-const llamaSrc = join(root, "bin", platform, llamaServerExeName());
+const binSrc = join(root, "bin", platform);
 
 if (existsSync(proxySrc)) {
   cpSync(proxySrc, join(binDest, proxyName));
 }
-if (existsSync(llamaSrc)) {
-  cpSync(llamaSrc, join(binDest, llamaServerExeName()));
+if (existsSync(binSrc)) {
+  for (const name of readdirSync(binSrc)) {
+    const src = join(binSrc, name);
+    if (!statSync(src).isFile()) {
+      continue;
+    }
+    if (!keepLlamaRuntimeFile(name, platform)) {
+      continue;
+    }
+    cpSync(src, join(binDest, name));
+  }
 }
 
 cpSync(

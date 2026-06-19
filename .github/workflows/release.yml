@@ -64,8 +64,7 @@ jobs:
         shell: bash
         run: |
           node scripts/fetch-llama-server.mjs --variant cpu --platform ${{ matrix.platform }}
-          mkdir -p artifacts/${{ matrix.platform }}
-          cp bin/${{ matrix.platform }}/llama-server* artifacts/${{ matrix.platform }}/
+          node scripts/stage-llama-runtime.mjs --platform ${{ matrix.platform }}
       - uses: actions/upload-artifact@v7
         with:
           name: llama-server-${{ matrix.platform }}
@@ -83,6 +82,9 @@ jobs:
 
   package-vsix:
     needs: [build-proxy, fetch-llama-server, verify-manifest]
+    strategy:
+      matrix:
+        platform: [linux-x64, win32-x64, darwin-x64, darwin-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -93,15 +95,20 @@ jobs:
           cache: pnpm
       - uses: actions/download-artifact@v8
         with:
-          path: artifacts
-      - run: node scripts/layout-release-binaries.mjs artifacts
+          name: sidecar-proxy-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: llama-server-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+      - run: node scripts/layout-release-binaries.mjs artifacts/${{ matrix.platform }} --platform ${{ matrix.platform }}
       - run: pnpm install --frozen-lockfile || pnpm install
       - run: pnpm run compile
-      - run: npx @vscode/vsce package --no-dependencies
+      - run: npx @vscode/vsce package --no-dependencies --target ${{ matrix.platform }} --out llm-sidecar-${{ matrix.platform }}.vsix
       - uses: actions/upload-artifact@v7
         with:
-          name: llm-sidecar-vsix
-          path: "*.vsix"
+          name: llm-sidecar-vsix-${{ matrix.platform }}
+          path: llm-sidecar-${{ matrix.platform }}.vsix
 
   package-offline:
     needs: [build-proxy, fetch-llama-server, package-vsix]
@@ -114,6 +121,8 @@ jobs:
             platform: win32-x64
           - os: macos-latest
             platform: darwin-x64
+          - os: macos-latest
+            platform: darwin-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -122,8 +131,13 @@ jobs:
           node-version: 26
       - uses: actions/download-artifact@v8
         with:
-          path: artifacts
-      - run: node scripts/layout-release-binaries.mjs artifacts
+          name: sidecar-proxy-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: llama-server-${{ matrix.platform }}
+          path: artifacts/${{ matrix.platform }}
+      - run: node scripts/layout-release-binaries.mjs artifacts/${{ matrix.platform }} --platform ${{ matrix.platform }}
       - run: node scripts/package-offline-bundle.mjs --tier slim
       - uses: actions/upload-artifact@v7
         with:
@@ -151,6 +165,9 @@ jobs:
 
   publish-registries:
     needs: package-vsix
+    strategy:
+      matrix:
+        platform: [linux-x64, win32-x64, darwin-x64, darwin-arm64]
     runs-on: ubuntu-latest
     environment: marketplace
     if: startsWith(github.ref, 'refs/tags/v')
@@ -163,17 +180,17 @@ jobs:
           cache: pnpm
       - uses: actions/download-artifact@v8
         with:
-          name: llm-sidecar-vsix
+          name: llm-sidecar-vsix-${{ matrix.platform }}
           path: dist
       - run: pnpm install --frozen-lockfile
       - run: npm install -g @vscode/vsce ovsx
       - name: Verify VSIX contents
-        run: vsce ls --tree dist/*.vsix
+        run: vsce ls --tree dist/llm-sidecar-${{ matrix.platform }}.vsix
       - name: Publish to Visual Studio Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: bash scripts/publish-marketplace.sh dist/*.vsix
+        run: bash scripts/publish-marketplace.sh dist/llm-sidecar-${{ matrix.platform }}.vsix
       - name: Publish to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: ovsx publish dist/*.vsix -p "$OVSX_PAT"
+        run: ovsx publish dist/llm-sidecar-${{ matrix.platform }}.vsix -p "$OVSX_PAT"
